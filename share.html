@@ -208,22 +208,16 @@
         ctx.fillStyle = bgC; ctx.fillRect(0, 0, W, H);
         ctx.strokeStyle = borderC; ctx.lineWidth = 1; ctx.strokeRect(0.5, 0.5, W - 1, H - 1);
 
-        const LEFT = 100, TEXT_LEFT = 140;
-        let y = 120;
+        const LEFT = 100, RIGHT = W - LEFT, TEXT_LEFT = 140;
+        const srcLineH = 26, srcBottomMargin = 40, lineH = 70, barTopMargin = 30;
 
-        // ASCII frog mascot — top-left, accent color at 40% opacity
-        ctx.save();
-        ctx.globalAlpha = 0.4;
-        ctx.fillStyle = accentC;
-        ctx.font = '16px ' + monoF; ctx.textBaseline = 'top';
-        ['  @..@  ', ' (----) ', '( >__< )', ' ^^  ^^ '].forEach(function(line, i) { ctx.fillText(line, LEFT, 80 + i * 20); });
-        ctx.restore();
-
+        // ── Measure source text lines ──
+        var srcLines = [];
         if (source) {
-          ctx.font = '20px ' + monoF; ctx.fillStyle = dimC; ctx.textBaseline = 'top';
+          ctx.font = '20px ' + monoF;
           var MAX_W = W - 2 * LEFT;
           var prefix = '// ', prefixW = ctx.measureText(prefix).width;
-          var words = source.split(' '), srcLines = [], cur = '';
+          var words = source.split(' '), cur = '';
           for (var wi = 0; wi < words.length; wi++) {
             var test = cur ? cur + ' ' + words[wi] : words[wi];
             var lineW = (srcLines.length === 0 ? prefixW : 0) + ctx.measureText(test).width;
@@ -238,14 +232,31 @@
             }
             srcLines[srcLines.length - 1] = last + '…';
           }
-          srcLines.forEach(function(lineText, i) { ctx.fillText(i === 0 ? prefix + lineText : lineText, LEFT, y + i * 26); });
-          y += srcLines.length * 26 + 24;
         }
 
-        const lineH = 70;
-        const haikuStart = y + ((H - 200 - y) - lineH * 3) / 2;
-        y = haikuStart;
+        // ── Calculate startY — vertically centered, clamped ──
+        var srcHeight = srcLines.length > 0 ? srcLines.length * srcLineH + srcBottomMargin : 0;
+        var totalH = srcHeight + 3 * lineH + barTopMargin + 18;
+        var y = Math.max(180, Math.min(400, (H - totalH) / 2));
 
+        // ── Fixed top-right: ASCII frog, 40% opacity ──
+        ctx.save();
+        ctx.globalAlpha = 0.4;
+        ctx.fillStyle = accentC;
+        ctx.font = '16px ' + monoF; ctx.textBaseline = 'top';
+        ['  @..@  ', ' (----) ', '( >__< )', ' ^^  ^^ '].forEach(function(line, i) {
+          ctx.fillText(line, RIGHT - ctx.measureText(line).width, 80 + i * 20);
+        });
+        ctx.restore();
+
+        // ── Source text ──
+        if (srcLines.length > 0) {
+          ctx.font = '20px ' + monoF; ctx.fillStyle = dimC; ctx.textBaseline = 'top';
+          srcLines.forEach(function(lineText, i) { ctx.fillText(i === 0 ? '// ' + lineText : lineText, LEFT, y + i * srcLineH); });
+          y += srcLines.length * srcLineH + srcBottomMargin;
+        }
+
+        // ── Haiku lines ──
         [[line1, 5], [line2, 7], [line3, 5]].forEach(function(pair) {
           ctx.font = '22px ' + monoF; ctx.fillStyle = dimC; ctx.textBaseline = 'top';
           ctx.fillText(String(pair[1]), LEFT, y + 16);
@@ -254,7 +265,8 @@
           y += lineH;
         });
 
-        y += 30;
+        // ── Syllable bars ──
+        y += barTopMargin;
         ctx.font = '18px ' + monoF; ctx.textBaseline = 'top';
         var barX = LEFT;
         [[s1??5,5],[s2??7,7],[s3??5,5]].forEach(function(pair, i) {
@@ -265,9 +277,10 @@
           if (i < 2) barX += ctx.measureText(fStr + uStr).width + 25;
         });
 
+        // ── Fixed bottom: branding ──
         ctx.font = '20px ' + monoF; ctx.fillStyle = dimC; ctx.textBaseline = 'bottom';
         var brand = 'frogpond.lol';
-        ctx.fillText(brand, (W - ctx.measureText(brand).width) / 2, H - 80);
+        ctx.fillText(brand, (W - ctx.measureText(brand).width) / 2, 1010);
 
         cvs.toBlob(async function(blob) {
           try {
