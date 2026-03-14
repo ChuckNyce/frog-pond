@@ -53,13 +53,24 @@
     .share-action-btn {
       flex: 1; padding: 0.5rem; background: transparent; border: none;
       border-right: 1px solid var(--border); color: var(--mid);
-      font-family: var(--mono); font-size: 12px; cursor: pointer;
+      font-family: var(--mono); font-size: 13px; cursor: pointer;
       transition: color 0.1s, background 0.1s; text-align: center;
       text-decoration: none; display: flex; align-items: center; justify-content: center;
     }
     .share-action-btn:last-child { border-right: none; }
     .share-action-btn:hover { color: var(--accent); background: rgba(74,106,48,0.04); }
     .share-action-btn.ok { color: var(--green); }
+    .share-action-btn.cta {
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+    .share-action-btn.cta:hover { background: rgba(74,106,48,0.08); }
+    .share-tagline {
+      font-size: 11px;
+      color: var(--dim);
+      text-align: center;
+      margin-top: 0.75rem;
+    }
     .share-error { font-size: 13px; color: var(--red); padding: 0.75rem; border: 1px solid var(--red); }
     .share-error::before { content: "err: "; opacity: 0.6; }
   </style>
@@ -86,10 +97,12 @@
     </div>
 
     <div id="share-actions" class="share-actions hidden">
-      <button class="share-action-btn" id="copy-haiku">cp ./haiku</button>
-      <button class="share-action-btn" id="copy-link">share --link</button>
-      <a class="share-action-btn" href="/">./new</a>
+      <button class="share-action-btn" id="copy-haiku">copy haiku</button>
+      <button class="share-action-btn" id="copy-link">copy link</button>
+      <a class="share-action-btn cta" href="/">make your own →</a>
     </div>
+
+    <p class="share-tagline hidden" id="share-tagline">paste any post. get a haiku.</p>
 
   </div>
 </div>
@@ -158,19 +171,20 @@
 
     document.getElementById('share-box').classList.remove('hidden');
     document.getElementById('share-actions').classList.remove('hidden');
+    document.getElementById('share-tagline').classList.remove('hidden');
 
     const fullText = `${line1}\n${line2}\n${line3}`;
 
     document.getElementById('copy-haiku').addEventListener('click', function() {
       navigator.clipboard.writeText(fullText + '\n\n-- frogpond.app').then(() => {
         this.textContent = '// copied!'; this.classList.add('ok');
-        setTimeout(() => { this.textContent = 'cp ./haiku'; this.classList.remove('ok'); }, 1800);
+        setTimeout(() => { this.textContent = 'copy haiku'; this.classList.remove('ok'); }, 1800);
       });
     });
     document.getElementById('copy-link').addEventListener('click', function() {
       navigator.clipboard.writeText(window.location.href).then(() => {
         this.textContent = '// link copied!'; this.classList.add('ok');
-        setTimeout(() => { this.textContent = 'share --link'; this.classList.remove('ok'); }, 1800);
+        setTimeout(() => { this.textContent = 'copy link'; this.classList.remove('ok'); }, 1800);
       });
     });
   } catch(e) {

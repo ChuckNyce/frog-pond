@@ -37,15 +37,11 @@
 | __| _ \/ _ \ / __| | _ \/ _ \| \| |   \
 | _||   / (_) | (_ | |  _/ (_) | .` | |) |
 |_| |_|_\\___/ \___| |_|  \___/|_|\_|___/</pre>
+    <p class="header-title-fallback">FROG POND</p>
     <div class="header-meta">
       <span class="comment">// any post. any platform. all haiku.</span>
       <span class="version">v1.0.0</span>
     </div>
-  </div>
-
-  <!-- Ko-fi -->
-  <div class="kofi-line">
-    [ ☕ <a href="https://ko-fi.com/frogpondlol" target="_blank" rel="noopener">if this made you smile → ko-fi.com/frogpondlol</a> ]
   </div>
 
   <!-- Mode tabs -->
@@ -63,6 +59,9 @@
       </div>
       <textarea id="tweet-area" rows="5" placeholder="  paste a tweet, caption, post, comment, anything..."></textarea>
     </div>
+
+    <!-- Random button -->
+    <button class="random-btn" id="random-btn">./random --surprise-me</button>
   </div>
 
   <!-- Image panel -->
@@ -93,8 +92,11 @@
     <button class="tone-btn" data-tone="poetic"> poetic </button>
   </div>
 
+  <!-- Tone description -->
+  <div class="tone-description" id="tone-description">Treat the content with genuine sincerity and real emotional weight.</div>
+
   <!-- Convert -->
-  <button class="convert-btn" id="convert-btn">./convert --to haiku</button>
+  <button class="convert-btn" id="convert-btn">convert → haiku</button>
 
   <!-- Loading -->
   <div class="loading hidden" id="loading">
@@ -107,11 +109,16 @@
   <!-- Results -->
   <div class="haiku-list" id="results"></div>
 
+  <!-- Ko-fi (hidden until first convert) -->
+  <div class="kofi-line hidden" id="kofi-line">
+    [ ☕ <a href="https://ko-fi.com/frogpondlol" target="_blank" rel="noopener">if this made you smile → ko-fi.com/frogpondlol</a> ]
+  </div>
+
   <!-- History -->
   <div id="history-section" class="hidden history-section">
     <div class="history-header">
       <span class="history-comment">// recent_haiku[]</span>
-      <button class="history-clear" id="history-clear">rm -rf</button>
+      <button class="history-clear" id="history-clear">clear all</button>
     </div>
     <div id="history-list"></div>
   </div>

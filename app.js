@@ -4,6 +4,7 @@ let tone = 'sincere';
 let imageB64 = null;
 let imageMime = null;
 const MAX_HISTORY = 30;
+let hasConverted = false;
 
 // ── Speech ──
 let speaking = false;
@@ -17,7 +18,7 @@ function speak(text, btn) {
     speaking = false;
     // Reset all speak buttons
     document.querySelectorAll('.action-btn[data-speak]').forEach(b => {
-      b.textContent = 'read --aloud';
+      b.textContent = 'read aloud';
       b.classList.remove('ok');
     });
     if (btn.dataset.speak === text) return; // tapped same button = just stop
@@ -41,7 +42,7 @@ function speak(text, btn) {
   };
   utt.onend = utt.onerror = () => {
     speaking = false;
-    if (btn) { btn.textContent = 'read --aloud'; btn.classList.remove('ok'); }
+    if (btn) { btn.textContent = 'read aloud'; btn.classList.remove('ok'); }
   };
 
   window.speechSynthesis.speak(utt);
@@ -52,6 +53,20 @@ const TONES = {
   absurd:  'Make it hilariously absurd — elevate mundane things into cosmic tragedy. Go weird.',
   poetic:  'Find hidden beauty and quiet melancholy, like a classic Japanese poet. Wabi-sabi.',
 };
+
+// ── Random example posts ──
+const RANDOM_POSTS = [
+  "just spent 20 minutes looking for my phone. it was in my hand.",
+  "my therapist said I need to stop comparing myself to others. I bet other people's therapists don't say that.",
+  "normalize leaving a party early because you already peaked socially in the first 10 minutes",
+  "the wifi went down for five minutes so I had to talk to my family. they seem like nice people.",
+  "I love when people say 'we should hang out' and then we never do. anyway I'm free right now. goodbye.",
+  "hot take: sleep is the only hobby that has never let me down",
+  "I cleaned my room and now I don't know what to do with my hands",
+  "sent a risky text and immediately became very interested in the ceiling",
+  "me: I'm going to be productive today. also me: [opens the fridge for the fifth time in an hour]",
+  "running late is my love language. I'm sorry. I'm working on it. I am not working on it.",
+];
 
 // ── Dark mode ──
 function initTheme() {
@@ -94,6 +109,9 @@ const errorEl        = $('error');
 const historySection = $('history-section');
 const historyList    = $('history-list');
 const historyClear   = $('history-clear');
+const randomBtn      = $('random-btn');
+const toneDesc       = $('tone-description');
+const kofiLine       = $('kofi-line');
 
 // ── Init ──
 function init() {
@@ -129,7 +147,17 @@ document.querySelectorAll('.tone-btn').forEach(btn => {
     btn.classList.add('active');
     btn.textContent = `[${btn.dataset.tone}]`;
     tone = btn.dataset.tone;
+    if (toneDesc) toneDesc.textContent = TONES[tone];
   });
+});
+
+// ── Random post ──
+randomBtn.addEventListener('click', () => {
+  const post = RANDOM_POSTS[Math.floor(Math.random() * RANDOM_POSTS.length)];
+  tweetArea.value = post;
+  charCount.textContent = post.length + ' / 560';
+  updateConvertBtn();
+  convert();
 });
 
 // ── Text input ──
@@ -199,6 +227,12 @@ async function convert() {
     }
     saveToHistory(results);
     renderResults(results);
+
+    // Show Ko-fi after first successful conversion
+    if (!hasConverted) {
+      hasConverted = true;
+      kofiLine.classList.remove('hidden');
+    }
   } catch (err) {
     errorEl.textContent = err.message || 'something went wrong. try again.';
     errorEl.classList.remove('hidden');
@@ -359,7 +393,7 @@ function renderResults(results) {
   if (results.length > 0) {
     const regen = document.createElement('button');
     regen.className = 'regen-btn';
-    regen.textContent = '// retry';
+    regen.textContent = '↻ regenerate';
     regen.addEventListener('click', convert);
     resultsEl.after(regen);
   }
@@ -395,9 +429,9 @@ function makeCard(r, idx) {
           ${[[haiku.s1??5,5],[haiku.s2??7,7],[haiku.s3??5,5]].map(([c,t2]) => `<span>${sylBar(c,t2)}</span>`).join('')}
         </div>
         <div class="card-actions">
-          <button class="action-btn" data-copy="${esc(fullText)}">cp ./haiku</button>
-          <button class="action-btn" data-url="${esc(shareUrl)}">share --link</button>
-          <button class="action-btn" data-speak="${esc(fullText)}" data-speak-source="${esc(source)}">read --aloud</button>
+          <button class="action-btn" data-copy="${esc(fullText)}">copy haiku</button>
+          <button class="action-btn" data-url="${esc(shareUrl)}">copy link</button>
+          <button class="action-btn" data-speak="${esc(fullText)}" data-speak-source="${esc(source)}">read aloud</button>
         </div>
       </div>
     </div>
