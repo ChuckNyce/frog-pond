@@ -9,6 +9,7 @@
   <meta property="og:type" content="website" />
   <meta name="twitter:card" content="summary" />
   <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/style.css" />
   <style>
     .share-wrap {
@@ -20,81 +21,51 @@
       padding: 2rem 1.5rem;
     }
     .share-inner { width: 100%; max-width: 520px; }
-
-    .share-logo {
-      font-size: 11px; color: var(--dim);
-      margin-bottom: 2.5rem; text-align: center;
-    }
+    .share-logo { font-size: 12px; color: var(--dim); margin-bottom: 2.5rem; text-align: center; }
     .share-logo a { color: var(--mid); text-decoration: none; }
     .share-logo a:hover { color: var(--accent); }
-
-    .share-box {
-      border: 1px solid var(--border);
-      background: var(--surface);
-      margin-bottom: 1rem;
-    }
+    .share-box { border: 1px solid var(--border); background: var(--surface); margin-bottom: 1rem; }
     .share-bar {
-      padding: 0.35rem 0.75rem;
-      border-bottom: 1px solid var(--border);
-      font-size: 11px; color: var(--dim);
+      padding: 0.35rem 0.75rem; border-bottom: 1px solid var(--border);
+      font-size: 12px; color: var(--dim);
       display: flex; justify-content: space-between;
       background: rgba(0,0,0,0.02);
     }
     .share-body { padding: 2rem 1rem 1.5rem; }
-
     .share-source {
-      font-size: 10px; color: var(--dim);
-      margin-bottom: 1.25rem;
-      padding-left: 0.75rem;
-      border-left: 2px solid var(--border);
+      font-size: 11px; color: var(--dim); margin-bottom: 1.25rem;
+      padding-left: 0.75rem; border-left: 2px solid var(--border);
     }
     .share-source::before { content: "// "; }
-
-    .share-line-row {
-      display: flex; gap: 1rem;
-      align-items: baseline; margin-bottom: 0.4rem;
-    }
-    .share-line-num { font-size: 10px; color: var(--dim); width: 12px; flex-shrink: 0; }
+    .share-line-row { display: flex; gap: 1rem; align-items: baseline; margin-bottom: 0.4rem; }
+    .share-line-num { font-size: 11px; color: var(--dim); width: 14px; flex-shrink: 0; }
     .share-line-text {
       font-family: var(--serif); font-style: italic;
-      font-size: clamp(20px, 5vw, 26px);
-      color: var(--text); line-height: 1.5;
+      font-size: clamp(22px, 5vw, 28px); color: var(--text); line-height: 1.5;
     }
-
     .share-syl-bars {
       display: flex; gap: 1.25rem;
       font-size: 11px; letter-spacing: 2px; color: var(--border);
-      margin-top: 1.25rem; padding-top: 0.75rem;
-      border-top: 1px solid var(--border);
+      margin-top: 1.25rem; padding-top: 0.75rem; border-top: 1px solid var(--border);
     }
     .share-syl-filled { color: var(--accent); }
-
-    .share-actions {
-      display: flex;
-      border: 1px solid var(--border);
-    }
+    .share-actions { display: flex; border: 1px solid var(--border); }
     .share-action-btn {
-      flex: 1; padding: 0.5rem;
-      background: transparent; border: none;
-      border-right: 1px solid var(--border);
-      color: var(--mid); font-family: var(--mono);
-      font-size: 11px; cursor: pointer;
-      transition: color 0.1s, background 0.1s;
-      text-align: center; text-decoration: none;
-      display: flex; align-items: center; justify-content: center;
+      flex: 1; padding: 0.5rem; background: transparent; border: none;
+      border-right: 1px solid var(--border); color: var(--mid);
+      font-family: var(--mono); font-size: 12px; cursor: pointer;
+      transition: color 0.1s, background 0.1s; text-align: center;
+      text-decoration: none; display: flex; align-items: center; justify-content: center;
     }
     .share-action-btn:last-child { border-right: none; }
     .share-action-btn:hover { color: var(--accent); background: rgba(74,106,48,0.04); }
     .share-action-btn.ok { color: var(--green); }
-
-    .share-error {
-      font-size: 12px; color: var(--red);
-      padding: 0.75rem; border: 1px solid var(--red);
-    }
+    .share-error { font-size: 13px; color: var(--red); padding: 0.75rem; border: 1px solid var(--red); }
     .share-error::before { content: "err: "; opacity: 0.6; }
   </style>
 </head>
 <body>
+<button class="theme-toggle" id="theme-toggle">[ dark ]</button>
 <div class="share-wrap">
   <div class="share-inner">
 
@@ -123,6 +94,24 @@
   </div>
 </div>
 <script>
+  // ── Dark mode ──
+  (function() {
+    const saved = localStorage.getItem('fp_theme');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const isDark = saved ? saved === 'dark' : prefersDark;
+    const t = isDark ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', t);
+    document.getElementById('theme-toggle').textContent = isDark ? '[ light ]' : '[ dark ]';
+  })();
+
+  document.getElementById('theme-toggle').addEventListener('click', function() {
+    const current = document.documentElement.getAttribute('data-theme');
+    const next = current === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    this.textContent = next === 'dark' ? '[ light ]' : '[ dark ]';
+    localStorage.setItem('fp_theme', next);
+  });
+
   function esc(s) {
     return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
