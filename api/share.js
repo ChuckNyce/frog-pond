@@ -128,7 +128,7 @@ module.exports = async function handler(req, res) {
     </div>
     <div id="share-actions" class="share-actions hidden">
       <button class="share-action-btn" id="copy-haiku">copy haiku</button>
-      <button class="share-action-btn" id="save-image">save image</button>
+      <button class="share-action-btn" id="save-image">share</button>
       <button class="share-action-btn" id="copy-link">copy link</button>
       <a class="share-action-btn cta" href="/">make your own →</a>
     </div>
@@ -207,21 +207,58 @@ module.exports = async function handler(req, res) {
         var monoF = "'Courier New', monospace", serifF = "'IM Fell English', Georgia, serif";
         ctx.fillStyle = bgC; ctx.fillRect(0, 0, W, H);
         ctx.strokeStyle = borderC; ctx.lineWidth = 1; ctx.strokeRect(0.5, 0.5, W - 1, H - 1);
-        var LEFT = 100, TEXT_LEFT = 140, y = 120;
+        var LEFT = 100, RIGHT = W - LEFT, TEXT_LEFT = 140;
+        var srcLineH = 26, srcBottomMargin = 40, lineH = 70, barTopMargin = 30;
+        // ── Measure source text lines ──
+        var srcLines = [];
         if (source) {
-          var trunc = source.length > 60 ? source.slice(0, 60) + '...' : source;
-          ctx.font = '20px ' + monoF; ctx.fillStyle = dimC; ctx.textBaseline = 'top';
-          ctx.fillText('// ' + trunc, LEFT, y); y += 50;
+          ctx.font = '20px ' + monoF;
+          var MAX_W = W - 2 * LEFT;
+          var prefix = '// ', prefixW = ctx.measureText(prefix).width;
+          var words = source.split(' '), cur = '';
+          for (var wi = 0; wi < words.length; wi++) {
+            var test = cur ? cur + ' ' + words[wi] : words[wi];
+            var lineW = (srcLines.length === 0 ? prefixW : 0) + ctx.measureText(test).width;
+            if (lineW > MAX_W && cur) { srcLines.push(cur); if (srcLines.length === 3) { cur = ''; break; } cur = words[wi]; }
+            else { cur = test; }
+          }
+          if (cur && srcLines.length < 3) srcLines.push(cur);
+          if (srcLines.join(' ').length < source.replace(/\\s+/g, ' ').trim().length) {
+            var last = srcLines[srcLines.length - 1], isFirst = srcLines.length === 1;
+            while (last.length > 0 && (isFirst ? prefixW : 0) + ctx.measureText(last + '\\u2026').width > MAX_W) {
+              var sp = last.lastIndexOf(' '); last = sp > 0 ? last.slice(0, sp) : last.slice(0, -1);
+            }
+            srcLines[srcLines.length - 1] = last + '\\u2026';
+          }
         }
-        var lineH = 70, haikuStart = y + ((H - 200 - y) - lineH * 3) / 2;
-        y = haikuStart;
+        // ── Calculate startY — vertically centered, clamped ──
+        var srcHeight = srcLines.length > 0 ? srcLines.length * srcLineH + srcBottomMargin : 0;
+        var totalH = srcHeight + 3 * lineH + barTopMargin + 18;
+        var y = Math.max(180, Math.min(400, (H - totalH) / 2));
+        // ── Fixed top-right: ASCII frog, 40% opacity ──
+        ctx.save();
+        ctx.globalAlpha = 0.4;
+        ctx.fillStyle = accentC;
+        ctx.font = '16px ' + monoF; ctx.textBaseline = 'top';
+        ['  @..@  ', ' (----) ', '( >__< )', ' ^^  ^^ '].forEach(function(line, i) {
+          ctx.fillText(line, RIGHT - ctx.measureText(line).width, 80 + i * 20);
+        });
+        ctx.restore();
+        // ── Source text ──
+        if (srcLines.length > 0) {
+          ctx.font = '20px ' + monoF; ctx.fillStyle = dimC; ctx.textBaseline = 'top';
+          srcLines.forEach(function(lineText, i) { ctx.fillText(i === 0 ? '// ' + lineText : lineText, LEFT, y + i * srcLineH); });
+          y += srcLines.length * srcLineH + srcBottomMargin;
+        }
+        // ── Haiku lines ──
         [[line1, 5], [line2, 7], [line3, 5]].forEach(function(p) {
           ctx.font = '22px ' + monoF; ctx.fillStyle = dimC; ctx.textBaseline = 'top';
           ctx.fillText(String(p[1]), LEFT, y + 16);
           ctx.font = 'italic 52px ' + serifF; ctx.fillStyle = textC;
           ctx.fillText(p[0], TEXT_LEFT, y); y += lineH;
         });
-        y += 30;
+        // ── Syllable bars ──
+        y += barTopMargin;
         ctx.font = '18px ' + monoF; ctx.textBaseline = 'top';
         var barX = LEFT;
         [[s1??5,5],[s2??7,7],[s3??5,5]].forEach(function(p, i) {
@@ -232,16 +269,17 @@ module.exports = async function handler(req, res) {
           ctx.fillStyle = borderC; ctx.fillText(uStr, barX + ctx.measureText(fStr).width, y);
           if (i < 2) barX += ctx.measureText(fStr + uStr).width + 25;
         });
+        // ── Fixed bottom: branding ──
         ctx.font = '20px ' + monoF; ctx.fillStyle = dimC; ctx.textBaseline = 'bottom';
-        var brand = '@..@ frogpond.lol';
-        ctx.fillText(brand, (W - ctx.measureText(brand).width) / 2, H - 80);
+        var brand = 'frogpond.lol';
+        ctx.fillText(brand, (W - ctx.measureText(brand).width) / 2, 1010);
         cvs.toBlob(async function(blob) {
           try {
             if (navigator.share && navigator.canShare) {
               var file = new File([blob], 'haiku-frogpond.png', { type: 'image/png' });
               if (navigator.canShare({ files: [file] })) {
                 await navigator.share({ files: [file], title: 'haiku \\u2014 frogpond.lol' });
-                btn.textContent = '// saved!';
+                btn.textContent = '// shared!';
                 setTimeout(function() { btn.textContent = orig; btn.classList.remove('ok'); }, 1800);
                 return;
               }
@@ -251,7 +289,7 @@ module.exports = async function handler(req, res) {
             a.href = url; a.download = 'haiku-frogpond.png';
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            btn.textContent = '// saved!';
+            btn.textContent = '// shared!';
             setTimeout(function() { btn.textContent = orig; btn.classList.remove('ok'); }, 1800);
           } catch(e) { btn.textContent = orig; btn.classList.remove('ok'); }
         }, 'image/png');
