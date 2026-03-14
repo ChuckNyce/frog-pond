@@ -254,6 +254,14 @@ async function convert() {
       results = await parseAndConvertImage(imageB64, imageMime);
     }
     saveToHistory(results);
+    if (window.posthog) {
+      posthog.capture('haiku_converted', {
+        mode: mode,
+        tone: tone,
+        haiku_count: results.length,
+        source: mode === 'text' ? 'paste' : 'screenshot',
+      });
+    }
     renderResults(results);
 
     // Show Ko-fi after first successful conversion
@@ -647,8 +655,17 @@ function makeCard(r, idx) {
         navigator.clipboard.writeText(this.dataset.copy + '\n\n-- frogpond.app').then(() => {
           this.textContent = '// copied!'; this.classList.add('ok');
           setTimeout(() => { this.textContent = orig; this.classList.remove('ok'); }, 1800);
+          if (window.posthog) {
+            posthog.capture('haiku_copied');
+          }
         });
       } else if ('saveImage' in this.dataset) {
+        if (window.posthog) {
+          posthog.capture('haiku_shared', {
+            tone: t,
+            method: navigator.share ? 'native_share' : 'download',
+          });
+        }
         saveHaikuImage(haiku, fullSource || source, this);
       } else if (this.dataset.speak) {
         speak(this.dataset.speak, this.dataset.speakSource, this);
