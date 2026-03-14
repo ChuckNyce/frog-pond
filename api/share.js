@@ -128,6 +128,7 @@ module.exports = async function handler(req, res) {
     </div>
     <div id="share-actions" class="share-actions hidden">
       <button class="share-action-btn" id="copy-haiku">copy haiku</button>
+      <button class="share-action-btn" id="save-image">save image</button>
       <button class="share-action-btn" id="copy-link">copy link</button>
       <a class="share-action-btn cta" href="/">make your own →</a>
     </div>
@@ -191,6 +192,70 @@ module.exports = async function handler(req, res) {
         this.textContent = '// link copied!'; this.classList.add('ok');
         setTimeout(() => { this.textContent = 'copy link'; this.classList.remove('ok'); }, 1800);
       });
+    });
+
+    document.getElementById('save-image').addEventListener('click', async function() {
+      var btn = this, orig = btn.textContent;
+      btn.textContent = '// generating...'; btn.classList.add('ok');
+      try {
+        await document.fonts.ready;
+        var W = 1080, H = 1080;
+        var cvs = document.createElement('canvas');
+        cvs.width = W; cvs.height = H;
+        var ctx = cvs.getContext('2d');
+        var bgC = '#f7f3ea', textC = '#2c2418', dimC = '#887050', accentC = '#4a6a30', borderC = '#c8bfa8';
+        var monoF = "'Courier New', monospace", serifF = "'IM Fell English', Georgia, serif";
+        ctx.fillStyle = bgC; ctx.fillRect(0, 0, W, H);
+        ctx.strokeStyle = borderC; ctx.lineWidth = 1; ctx.strokeRect(0.5, 0.5, W - 1, H - 1);
+        var LEFT = 100, TEXT_LEFT = 140, y = 120;
+        if (source) {
+          var trunc = source.length > 60 ? source.slice(0, 60) + '...' : source;
+          ctx.font = '20px ' + monoF; ctx.fillStyle = dimC; ctx.textBaseline = 'top';
+          ctx.fillText('// ' + trunc, LEFT, y); y += 50;
+        }
+        var lineH = 70, haikuStart = y + ((H - 200 - y) - lineH * 3) / 2;
+        y = haikuStart;
+        [[line1, 5], [line2, 7], [line3, 5]].forEach(function(p) {
+          ctx.font = '22px ' + monoF; ctx.fillStyle = dimC; ctx.textBaseline = 'top';
+          ctx.fillText(String(p[1]), LEFT, y + 16);
+          ctx.font = 'italic 52px ' + serifF; ctx.fillStyle = textC;
+          ctx.fillText(p[0], TEXT_LEFT, y); y += lineH;
+        });
+        y += 30;
+        ctx.font = '18px ' + monoF; ctx.textBaseline = 'top';
+        var barX = LEFT;
+        [[s1??5,5],[s2??7,7],[s3??5,5]].forEach(function(p, i) {
+          var filled = Math.min(p[0] ?? p[1], p[1]);
+          var fStr = String.fromCharCode(9608).repeat(filled);
+          var uStr = String.fromCharCode(9617).repeat(p[1] - filled);
+          ctx.fillStyle = accentC; ctx.fillText(fStr, barX, y);
+          ctx.fillStyle = borderC; ctx.fillText(uStr, barX + ctx.measureText(fStr).width, y);
+          if (i < 2) barX += ctx.measureText(fStr + uStr).width + 25;
+        });
+        ctx.font = '20px ' + monoF; ctx.fillStyle = dimC; ctx.textBaseline = 'bottom';
+        var brand = '@..@ frogpond.lol';
+        ctx.fillText(brand, (W - ctx.measureText(brand).width) / 2, H - 80);
+        cvs.toBlob(async function(blob) {
+          try {
+            if (navigator.share && navigator.canShare) {
+              var file = new File([blob], 'haiku-frogpond.png', { type: 'image/png' });
+              if (navigator.canShare({ files: [file] })) {
+                await navigator.share({ files: [file], title: 'haiku \\u2014 frogpond.lol' });
+                btn.textContent = '// saved!';
+                setTimeout(function() { btn.textContent = orig; btn.classList.remove('ok'); }, 1800);
+                return;
+              }
+            }
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url; a.download = 'haiku-frogpond.png';
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            btn.textContent = '// saved!';
+            setTimeout(function() { btn.textContent = orig; btn.classList.remove('ok'); }, 1800);
+          } catch(e) { btn.textContent = orig; btn.classList.remove('ok'); }
+        }, 'image/png');
+      } catch(e) { btn.textContent = orig; btn.classList.remove('ok'); }
     });
   } catch(e) {
     document.getElementById('share-error').classList.remove('hidden');

@@ -350,6 +350,154 @@ Same order as input. Count syllables carefully. All lines lowercase. ${TONES[ton
   })).filter(r => r.haiku);
 }
 
+// ── Haiku image generation ──
+async function generateHaikuImage(haiku, source) {
+  await document.fonts.ready;
+
+  const W = 1080, H = 1080;
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  // Colors — always light mode
+  const bg      = '#f7f3ea';
+  const text    = '#2c2418';
+  const dim     = '#887050';
+  const accent  = '#4a6a30';
+  const border  = '#c8bfa8';
+  const mono    = "'Courier New', monospace";
+  const serif   = "'IM Fell English', Georgia, serif";
+
+  // Background
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Subtle border
+  ctx.strokeStyle = border;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(0.5, 0.5, W - 1, H - 1);
+
+  const LEFT = 100;
+  const TEXT_LEFT = LEFT + 40;
+  let y = 120;
+
+  // Source text
+  if (source) {
+    const truncated = source.length > 60 ? source.slice(0, 60) + '…' : source;
+    ctx.font = `20px ${mono}`;
+    ctx.fillStyle = dim;
+    ctx.textBaseline = 'top';
+    ctx.fillText('// ' + truncated, LEFT, y);
+    y += 50;
+  }
+
+  // Center the haiku block vertically in the middle area
+  // Calculate total haiku block height: 3 lines * ~70px each
+  const lineHeight = 70;
+  const haikuBlockHeight = lineHeight * 3;
+  const availableTop = y;
+  const availableBottom = H - 200; // leave room for bars + branding
+  const haikuStartY = availableTop + (availableBottom - availableTop - haikuBlockHeight) / 2;
+  y = haikuStartY;
+
+  // Haiku lines
+  const lines = [
+    [haiku.line1, 5],
+    [haiku.line2, 7],
+    [haiku.line3, 5],
+  ];
+
+  lines.forEach(([line, syl]) => {
+    // Syllable count number
+    ctx.font = `22px ${mono}`;
+    ctx.fillStyle = dim;
+    ctx.textBaseline = 'top';
+    ctx.fillText(String(syl), LEFT, y + 16);
+
+    // Haiku text
+    ctx.font = `italic 52px ${serif}`;
+    ctx.fillStyle = text;
+    ctx.fillText(line, TEXT_LEFT, y);
+    y += lineHeight;
+  });
+
+  // Syllable bars
+  y += 30;
+  const barData = [
+    [haiku.s1 ?? 5, 5],
+    [haiku.s2 ?? 7, 7],
+    [haiku.s3 ?? 5, 5],
+  ];
+
+  ctx.font = `18px ${mono}`;
+  ctx.textBaseline = 'top';
+  let barX = LEFT;
+
+  barData.forEach(([count, total], i) => {
+    const filled = Math.min(count ?? total, total);
+    const filledStr = '█'.repeat(filled);
+    const unfilledStr = '░'.repeat(total - filled);
+
+    ctx.fillStyle = accent;
+    ctx.fillText(filledStr, barX, y);
+    const filledWidth = ctx.measureText(filledStr).width;
+
+    ctx.fillStyle = border;
+    ctx.fillText(unfilledStr, barX + filledWidth, y);
+
+    if (i < barData.length - 1) {
+      barX += ctx.measureText(filledStr + unfilledStr).width + 25;
+    }
+  });
+
+  // Branding
+  ctx.font = `20px ${mono}`;
+  ctx.fillStyle = dim;
+  ctx.textBaseline = 'bottom';
+  const brandText = '@..@ frogpond.lol';
+  const brandWidth = ctx.measureText(brandText).width;
+  ctx.fillText(brandText, (W - brandWidth) / 2, H - 80);
+
+  return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+}
+
+async function saveHaikuImage(haiku, source, btn) {
+  const orig = btn.textContent;
+  btn.textContent = '// generating...';
+  btn.classList.add('ok');
+
+  try {
+    const blob = await generateHaikuImage(haiku, source);
+
+    // Try native share on mobile
+    if (navigator.share && navigator.canShare) {
+      const file = new File([blob], 'haiku-frogpond.png', { type: 'image/png' });
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'haiku — frogpond.lol' });
+        btn.textContent = '// saved!'; btn.classList.add('ok');
+        setTimeout(() => { btn.textContent = orig; btn.classList.remove('ok'); }, 1800);
+        return;
+      }
+    }
+
+    // Fallback: download
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'haiku-frogpond.png';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    btn.textContent = '// saved!';
+    setTimeout(() => { btn.textContent = orig; btn.classList.remove('ok'); }, 1800);
+  } catch (err) {
+    btn.textContent = orig;
+    btn.classList.remove('ok');
+  }
+}
+
 // ── Share URL — lean payload, no source or syl counts to keep URLs short ──
 function makeShareUrl(haiku, source, t) {
   const payload = {
@@ -434,7 +582,6 @@ function makeCard(r, idx) {
   card.className = 'haiku-card';
   card.style.transitionDelay = `${idx * 0.08}s`;
 
-  const shareUrl = makeShareUrl(haiku, source, t);
   const fullText = `${haiku.line1}\n${haiku.line2}\n${haiku.line3}`;
 
   const sylBar = (count, total) => {
@@ -459,7 +606,7 @@ function makeCard(r, idx) {
         </div>
         <div class="card-actions">
           <button class="action-btn" data-copy="${esc(fullText)}">copy haiku</button>
-          <button class="action-btn" data-url="${esc(shareUrl)}">copy link</button>
+          <button class="action-btn" data-save-image>save image</button>
           <button class="action-btn" data-speak="${esc(fullText)}" data-speak-source="${esc(fullSource || source)}">read aloud</button>
         </div>
       </div>
@@ -474,11 +621,8 @@ function makeCard(r, idx) {
           this.textContent = '// copied!'; this.classList.add('ok');
           setTimeout(() => { this.textContent = orig; this.classList.remove('ok'); }, 1800);
         });
-      } else if (this.dataset.url) {
-        navigator.clipboard.writeText(this.dataset.url).then(() => {
-          this.textContent = '// link copied!'; this.classList.add('ok');
-          setTimeout(() => { this.textContent = orig; this.classList.remove('ok'); }, 1800);
-        });
+      } else if ('saveImage' in this.dataset) {
+        saveHaikuImage(haiku, source || fullSource, this);
       } else if (this.dataset.speak) {
         speak(this.dataset.speak, this.dataset.speakSource, this);
       }
