@@ -8,44 +8,72 @@ let hasConverted = false;
 
 // ── Speech ──
 let speaking = false;
+let pendingPauseTimeout = null;
 
-function speak(text, btn) {
+function speak(haikuText, sourceText, btn) {
   if (!window.speechSynthesis) return;
 
-  // If already speaking, stop
+  // If already speaking, stop everything
   if (speaking) {
     window.speechSynthesis.cancel();
+    if (pendingPauseTimeout) { clearTimeout(pendingPauseTimeout); pendingPauseTimeout = null; }
     speaking = false;
-    // Reset all speak buttons
     document.querySelectorAll('.action-btn[data-speak]').forEach(b => {
       b.textContent = 'read aloud';
       b.classList.remove('ok');
     });
-    if (btn.dataset.speak === text) return; // tapped same button = just stop
+    if (btn.dataset.speak === haikuText) return; // tapped same button = just stop
   }
-
-  const utt = new SpeechSynthesisUtterance(text);
-  utt.rate = 0.88;   // slightly slow — more gravitas
-  utt.pitch = 1.0;
-  utt.volume = 1;
 
   // Pick a voice: prefer a dull neutral English one for maximum robo energy
   const voices = window.speechSynthesis.getVoices();
   const preferred = voices.find(v =>
     v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Samantha') || v.name.includes('Daniel'))
   ) || voices.find(v => v.lang.startsWith('en')) || voices[0];
-  if (preferred) utt.voice = preferred;
 
-  utt.onstart = () => {
+  function makeUtt(text) {
+    const utt = new SpeechSynthesisUtterance(text);
+    utt.rate = 0.88;
+    utt.pitch = 1.0;
+    utt.volume = 1;
+    if (preferred) utt.voice = preferred;
+    return utt;
+  }
+
+  function setActive() {
     speaking = true;
     if (btn) { btn.textContent = '// reading...'; btn.classList.add('ok'); }
-  };
-  utt.onend = utt.onerror = () => {
+  }
+
+  function resetBtn() {
     speaking = false;
     if (btn) { btn.textContent = 'read aloud'; btn.classList.remove('ok'); }
-  };
+  }
 
-  window.speechSynthesis.speak(utt);
+  if (sourceText) {
+    const srcUtt = makeUtt(sourceText);
+    const haikuUtt = makeUtt(haikuText);
+
+    srcUtt.onstart = setActive;
+    srcUtt.onerror = resetBtn;
+    srcUtt.onend = () => {
+      if (!speaking) return; // cancelled during source utterance
+      pendingPauseTimeout = setTimeout(() => {
+        pendingPauseTimeout = null;
+        if (!speaking) return; // cancelled during pause
+        window.speechSynthesis.speak(haikuUtt);
+      }, 1200);
+    };
+
+    haikuUtt.onend = haikuUtt.onerror = resetBtn;
+
+    window.speechSynthesis.speak(srcUtt);
+  } else {
+    const utt = makeUtt(haikuText);
+    utt.onstart = setActive;
+    utt.onend = utt.onerror = resetBtn;
+    window.speechSynthesis.speak(utt);
+  }
 }
 
 const TONES = {
@@ -221,7 +249,7 @@ async function convert() {
     if (mode === 'text') {
       const text = tweetArea.value.trim();
       const haiku = await convertText(text);
-      results = [{ source: text.slice(0, 80), haiku, tone }];
+      results = [{ source: text.slice(0, 80), fullSource: text, haiku, tone }];
     } else {
       results = await parseAndConvertImage(imageB64, imageMime);
     }
@@ -316,6 +344,7 @@ Same order as input. Count syllables carefully. All lines lowercase. ${TONES[ton
 
   return posts.map((p, i) => ({
     source: (p.author ? `@${p.author}: ` : '') + p.text.slice(0, 80),
+    fullSource: (p.author ? `@${p.author}: ` : '') + p.text,
     haiku: haikus[i] || null,
     tone,
   })).filter(r => r.haiku);
@@ -400,7 +429,7 @@ function renderResults(results) {
 }
 
 function makeCard(r, idx) {
-  const { source, haiku, tone: t } = r;
+  const { source, fullSource, haiku, tone: t } = r;
   const card = document.createElement('div');
   card.className = 'haiku-card';
   card.style.transitionDelay = `${idx * 0.08}s`;
@@ -431,7 +460,7 @@ function makeCard(r, idx) {
         <div class="card-actions">
           <button class="action-btn" data-copy="${esc(fullText)}">copy haiku</button>
           <button class="action-btn" data-url="${esc(shareUrl)}">copy link</button>
-          <button class="action-btn" data-speak="${esc(fullText)}" data-speak-source="${esc(source)}">read aloud</button>
+          <button class="action-btn" data-speak="${esc(fullText)}" data-speak-source="${esc(fullSource || source)}">read aloud</button>
         </div>
       </div>
     </div>
@@ -451,13 +480,7 @@ function makeCard(r, idx) {
           setTimeout(() => { this.textContent = orig; this.classList.remove('ok'); }, 1800);
         });
       } else if (this.dataset.speak) {
-        // Read the original source tweet, then the haiku — comedy timing
-        const tweet = this.dataset.speakSource;
-        const haiku = this.dataset.speak;
-        const script = tweet
-          ? `${tweet} ... ... ${haiku}`
-          : haiku;
-        speak(script, this);
+        speak(this.dataset.speak, this.dataset.speakSource, this);
       }
     });
   });
