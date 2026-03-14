@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#f7f3ea" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="frog pond" />
+  <title>frog pond</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <div class="header">
+    <pre class="header-frog">  @..@
+ (----)
+( >__< )
+ ^^  ^^</pre>
+    <pre class="header-ascii"> ___ ___  ___   ___   ___  ___  _  _ ___
+| __| _ \/ _ \ / __| | _ \/ _ \| \| |   \
+| _||   / (_) | (_ | |  _/ (_) | .` | |) |
+|_| |_|_\\___/ \___| |_|  \___/|_|\_|___/</pre>
+    <div class="header-meta">
+      <span class="comment">// any post. any platform. all haiku.</span>
+      <span class="version">v1.0.0</span>
+    </div>
+  </div>
+
+  <!-- Ko-fi -->
+  <div class="kofi-line">
+    [ ☕ <a href="https://ko-fi.com/frogpondai" target="_blank" rel="noopener">if this made you smile → ko-fi.com/frogpondai</a> ]
+  </div>
+
+  <!-- Mode tabs -->
+  <div class="tabs">
+    <button class="tab active" id="tab-text">&gt; paste_text</button>
+    <button class="tab" id="tab-image">  screenshot</button>
+  </div>
+
+  <!-- Text panel -->
+  <div id="text-panel">
+    <div class="file-box">
+      <div class="file-bar">
+        <span>input.txt</span>
+        <span id="char-count">0 / 560</span>
+      </div>
+      <textarea id="tweet-area" rows="5" placeholder="  paste a tweet, caption, post, comment, anything..."></textarea>
+    </div>
+  </div>
+
+  <!-- Image panel -->
+  <div id="image-panel" class="hidden">
+    <div class="file-box">
+      <div class="file-bar">
+        <span>screenshot.png</span>
+        <span id="img-status">no file</span>
+      </div>
+      <div class="dropzone" id="dropzone">
+        <input type="file" id="file-input" accept="image/*" />
+        <div class="dropzone-icon">[ img ]</div>
+        <p>tap to choose a screenshot</p>
+        <small>drag and drop · jpg, png, webp</small>
+      </div>
+      <div class="preview-wrap hidden" id="preview-wrap">
+        <img id="preview-img" alt="screenshot" />
+        <button class="preview-clear" id="clear-img">[x] clear</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tone -->
+  <div class="tone-row">
+    <span class="tone-label">--tone</span>
+    <button class="tone-btn active" data-tone="sincere">[sincere]</button>
+    <button class="tone-btn" data-tone="absurd"> absurd </button>
+    <button class="tone-btn" data-tone="poetic"> poetic </button>
+  </div>
+
+  <!-- Convert -->
+  <button class="convert-btn" id="convert-btn">./convert --to haiku</button>
+
+  <!-- Loading -->
+  <div class="loading hidden" id="loading">
+    generating<span class="cursor"></span>
+  </div>
+
+  <!-- Error -->
+  <p class="error-msg hidden" id="error"></p>
+
+  <!-- Results -->
+  <div class="haiku-list" id="results"></div>
+
+  <!-- History -->
+  <div id="history-section" class="hidden history-section">
+    <div class="history-header">
+      <span class="history-comment">// recent_haiku[]</span>
+      <button class="history-clear" id="history-clear">rm -rf</button>
+    </div>
+    <div id="history-list"></div>
+  </div>
+
+</div>
+<script src="/app.js"></script>
+</body>
+</html>
