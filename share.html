@@ -98,7 +98,7 @@
 
     <div id="share-actions" class="share-actions hidden">
       <button class="share-action-btn" id="copy-haiku">copy haiku</button>
-      <button class="share-action-btn" id="save-image">save image</button>
+      <button class="share-action-btn" id="save-image">share</button>
       <button class="share-action-btn" id="copy-link">copy link</button>
       <a class="share-action-btn cta" href="/">make your own →</a>
     </div>
@@ -211,10 +211,35 @@
         const LEFT = 100, TEXT_LEFT = 140;
         let y = 120;
 
+        // ASCII frog mascot — top-left, accent color at 40% opacity
+        ctx.save();
+        ctx.globalAlpha = 0.4;
+        ctx.fillStyle = accentC;
+        ctx.font = '16px ' + monoF; ctx.textBaseline = 'top';
+        ['  @..@  ', ' (----) ', '( >__< )', ' ^^  ^^ '].forEach(function(line, i) { ctx.fillText(line, LEFT, 80 + i * 20); });
+        ctx.restore();
+
         if (source) {
-          const trunc = source.length > 60 ? source.slice(0, 60) + '…' : source;
           ctx.font = '20px ' + monoF; ctx.fillStyle = dimC; ctx.textBaseline = 'top';
-          ctx.fillText('// ' + trunc, LEFT, y); y += 50;
+          var MAX_W = W - 2 * LEFT;
+          var prefix = '// ', prefixW = ctx.measureText(prefix).width;
+          var words = source.split(' '), srcLines = [], cur = '';
+          for (var wi = 0; wi < words.length; wi++) {
+            var test = cur ? cur + ' ' + words[wi] : words[wi];
+            var lineW = (srcLines.length === 0 ? prefixW : 0) + ctx.measureText(test).width;
+            if (lineW > MAX_W && cur) { srcLines.push(cur); if (srcLines.length === 3) { cur = ''; break; } cur = words[wi]; }
+            else { cur = test; }
+          }
+          if (cur && srcLines.length < 3) srcLines.push(cur);
+          if (srcLines.join(' ').length < source.replace(/\s+/g, ' ').trim().length) {
+            var last = srcLines[srcLines.length - 1], isFirst = srcLines.length === 1;
+            while (last.length > 0 && (isFirst ? prefixW : 0) + ctx.measureText(last + '…').width > MAX_W) {
+              var sp = last.lastIndexOf(' '); last = sp > 0 ? last.slice(0, sp) : last.slice(0, -1);
+            }
+            srcLines[srcLines.length - 1] = last + '…';
+          }
+          srcLines.forEach(function(lineText, i) { ctx.fillText(i === 0 ? prefix + lineText : lineText, LEFT, y + i * 26); });
+          y += srcLines.length * 26 + 24;
         }
 
         const lineH = 70;
@@ -241,7 +266,7 @@
         });
 
         ctx.font = '20px ' + monoF; ctx.fillStyle = dimC; ctx.textBaseline = 'bottom';
-        var brand = '@..@ frogpond.lol';
+        var brand = 'frogpond.lol';
         ctx.fillText(brand, (W - ctx.measureText(brand).width) / 2, H - 80);
 
         cvs.toBlob(async function(blob) {
@@ -250,7 +275,7 @@
               var file = new File([blob], 'haiku-frogpond.png', { type: 'image/png' });
               if (navigator.canShare({ files: [file] })) {
                 await navigator.share({ files: [file], title: 'haiku — frogpond.lol' });
-                btn.textContent = '// saved!';
+                btn.textContent = '// shared!';
                 setTimeout(function() { btn.textContent = orig; btn.classList.remove('ok'); }, 1800);
                 return;
               }
@@ -260,7 +285,7 @@
             a.href = url; a.download = 'haiku-frogpond.png';
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            btn.textContent = '// saved!';
+            btn.textContent = '// shared!';
             setTimeout(function() { btn.textContent = orig; btn.classList.remove('ok'); }, 1800);
           } catch(e) { btn.textContent = orig; btn.classList.remove('ok'); }
         }, 'image/png');

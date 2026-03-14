@@ -381,14 +381,59 @@ async function generateHaikuImage(haiku, source) {
   const TEXT_LEFT = LEFT + 40;
   let y = 120;
 
-  // Source text
+  // ASCII frog mascot — top-left, accent color at 40% opacity
+  ctx.save();
+  ctx.globalAlpha = 0.4;
+  ctx.fillStyle = accent;
+  ctx.font = `16px ${mono}`;
+  ctx.textBaseline = 'top';
+  const frogLines = ['  @..@  ', ' (----) ', '( >__< )', ' ^^  ^^ '];
+  frogLines.forEach((line, i) => ctx.fillText(line, LEFT, 80 + i * 20));
+  ctx.restore();
+
+  // Source text — word-wrapped, full source, // prefix on first line only
   if (source) {
-    const truncated = source.length > 60 ? source.slice(0, 60) + '…' : source;
     ctx.font = `20px ${mono}`;
     ctx.fillStyle = dim;
     ctx.textBaseline = 'top';
-    ctx.fillText('// ' + truncated, LEFT, y);
-    y += 50;
+
+    const MAX_W = W - 2 * LEFT;
+    const prefix = '// ';
+    const prefixW = ctx.measureText(prefix).width;
+
+    // Build wrapped lines
+    const words = source.split(' ');
+    const srcLines = [];
+    let current = '';
+    for (const word of words) {
+      const test = current ? current + ' ' + word : word;
+      const lineW = (srcLines.length === 0 ? prefixW : 0) + ctx.measureText(test).width;
+      if (lineW > MAX_W && current) {
+        srcLines.push(current);
+        if (srcLines.length === 3) { current = ''; break; }
+        current = word;
+      } else {
+        current = test;
+      }
+    }
+    if (current && srcLines.length < 3) srcLines.push(current);
+
+    // Truncate last line with … if source was cut off
+    if (srcLines.join(' ').length < source.replace(/\s+/g, ' ').trim().length) {
+      let last = srcLines[srcLines.length - 1];
+      const isFirst = srcLines.length === 1;
+      while (last.length > 0 && (isFirst ? prefixW : 0) + ctx.measureText(last + '…').width > MAX_W) {
+        const sp = last.lastIndexOf(' ');
+        last = sp > 0 ? last.slice(0, sp) : last.slice(0, -1);
+      }
+      srcLines[srcLines.length - 1] = last + '…';
+    }
+
+    const srcLineH = 26;
+    srcLines.forEach((lineText, i) => {
+      ctx.fillText(i === 0 ? prefix + lineText : lineText, LEFT, y + i * srcLineH);
+    });
+    y += srcLines.length * srcLineH + 24;
   }
 
   // Center the haiku block vertically in the middle area
@@ -454,7 +499,7 @@ async function generateHaikuImage(haiku, source) {
   ctx.font = `20px ${mono}`;
   ctx.fillStyle = dim;
   ctx.textBaseline = 'bottom';
-  const brandText = '@..@ frogpond.lol';
+  const brandText = 'frogpond.lol';
   const brandWidth = ctx.measureText(brandText).width;
   ctx.fillText(brandText, (W - brandWidth) / 2, H - 80);
 
@@ -474,7 +519,7 @@ async function saveHaikuImage(haiku, source, btn) {
       const file = new File([blob], 'haiku-frogpond.png', { type: 'image/png' });
       if (navigator.canShare({ files: [file] })) {
         await navigator.share({ files: [file], title: 'haiku — frogpond.lol' });
-        btn.textContent = '// saved!'; btn.classList.add('ok');
+        btn.textContent = '// shared!'; btn.classList.add('ok');
         setTimeout(() => { btn.textContent = orig; btn.classList.remove('ok'); }, 1800);
         return;
       }
@@ -490,7 +535,7 @@ async function saveHaikuImage(haiku, source, btn) {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
-    btn.textContent = '// saved!';
+    btn.textContent = '// shared!';
     setTimeout(() => { btn.textContent = orig; btn.classList.remove('ok'); }, 1800);
   } catch (err) {
     btn.textContent = orig;
@@ -606,7 +651,7 @@ function makeCard(r, idx) {
         </div>
         <div class="card-actions">
           <button class="action-btn" data-copy="${esc(fullText)}">copy haiku</button>
-          <button class="action-btn" data-save-image>save image</button>
+          <button class="action-btn" data-save-image>share</button>
           <button class="action-btn" data-speak="${esc(fullText)}" data-speak-source="${esc(fullSource || source)}">read aloud</button>
         </div>
       </div>
@@ -622,7 +667,7 @@ function makeCard(r, idx) {
           setTimeout(() => { this.textContent = orig; this.classList.remove('ok'); }, 1800);
         });
       } else if ('saveImage' in this.dataset) {
-        saveHaikuImage(haiku, source || fullSource, this);
+        saveHaikuImage(haiku, fullSource || source, this);
       } else if (this.dataset.speak) {
         speak(this.dataset.speak, this.dataset.speakSource, this);
       }
