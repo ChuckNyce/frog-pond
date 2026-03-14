@@ -36,10 +36,11 @@ module.exports = async function handler(req, res) {
   <meta property="og:description" content="${esc(description)}" />
 
   <!-- Twitter card -->
-  <meta name="twitter:card"        content="summary" />
+  <meta property="og:image"       content="https://frogpond.lol/og-image.png" />
+  <meta name="twitter:card"        content="summary_large_image" />
   <meta name="twitter:title"       content="${esc(title)}" />
   <meta name="twitter:description" content="${esc(description)}" />
-  <meta name="twitter:site"        content="@frogpondlol" />
+  <meta name="twitter:image"       content="https://frogpond.lol/og-image.png" />
 
   <link rel="manifest" href="/manifest.json" />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
