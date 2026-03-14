@@ -1,0 +1,195 @@
+module.exports = async function handler(req, res) {
+  const encoded = req.query.h || '';
+
+  let line1 = '', line2 = '', line3 = '', source = '';
+
+  try {
+    const data = JSON.parse(Buffer.from(encoded, 'base64').toString('utf-8'));
+    line1  = data.line1  || '';
+    line2  = data.line2  || '';
+    line3  = data.line3  || '';
+    source = data.source || '';
+  } catch {
+    // bad payload — still render the page, JS will show the error state
+  }
+
+  const title       = line1 ? `${line1} / ${line2} / ${line3}` : 'frog pond';
+  const description = line1
+    ? `${line1}\n${line2}\n${line3}\n\nmade with frogpond.lol`
+    : 'any post. any platform. all haiku.';
+  const url = `https://frogpond.lol/share?h=${encoded}`;
+
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.status(200).send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f7f3ea" />
+  <title>${esc(title)} — frog pond</title>
+
+  <!-- OpenGraph -->
+  <meta property="og:site_name" content="frog pond" />
+  <meta property="og:type"      content="website" />
+  <meta property="og:url"       content="${esc(url)}" />
+  <meta property="og:title"     content="${esc(title)}" />
+  <meta property="og:description" content="${esc(description)}" />
+
+  <!-- Twitter card -->
+  <meta name="twitter:card"        content="summary" />
+  <meta name="twitter:title"       content="${esc(title)}" />
+  <meta name="twitter:description" content="${esc(description)}" />
+  <meta name="twitter:site"        content="@frogpondlol" />
+
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    .share-wrap {
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1.5rem;
+    }
+    .share-inner { width: 100%; max-width: 520px; }
+    .share-logo { font-size: 11px; color: var(--dim); margin-bottom: 2.5rem; text-align: center; }
+    .share-logo a { color: var(--mid); text-decoration: none; }
+    .share-logo a:hover { color: var(--accent); }
+    .share-box { border: 1px solid var(--border); background: var(--surface); margin-bottom: 1rem; }
+    .share-bar {
+      padding: 0.35rem 0.75rem; border-bottom: 1px solid var(--border);
+      font-size: 11px; color: var(--dim);
+      display: flex; justify-content: space-between;
+      background: rgba(0,0,0,0.02);
+    }
+    .share-body { padding: 2rem 1rem 1.5rem; }
+    .share-source {
+      font-size: 10px; color: var(--dim); margin-bottom: 1.25rem;
+      padding-left: 0.75rem; border-left: 2px solid var(--border);
+    }
+    .share-source::before { content: "// "; }
+    .share-line-row { display: flex; gap: 1rem; align-items: baseline; margin-bottom: 0.4rem; }
+    .share-line-num { font-size: 10px; color: var(--dim); width: 12px; flex-shrink: 0; }
+    .share-line-text {
+      font-family: var(--serif); font-style: italic;
+      font-size: clamp(20px, 5vw, 26px); color: var(--text); line-height: 1.5;
+    }
+    .share-syl-bars {
+      display: flex; gap: 1.25rem;
+      font-size: 11px; letter-spacing: 2px; color: var(--border);
+      margin-top: 1.25rem; padding-top: 0.75rem; border-top: 1px solid var(--border);
+    }
+    .share-syl-filled { color: var(--accent); }
+    .share-actions { display: flex; border: 1px solid var(--border); }
+    .share-action-btn {
+      flex: 1; padding: 0.5rem; background: transparent; border: none;
+      border-right: 1px solid var(--border); color: var(--mid);
+      font-family: var(--mono); font-size: 11px; cursor: pointer;
+      transition: color 0.1s, background 0.1s; text-align: center;
+      text-decoration: none; display: flex; align-items: center; justify-content: center;
+    }
+    .share-action-btn:last-child { border-right: none; }
+    .share-action-btn:hover { color: var(--accent); background: rgba(74,106,48,0.04); }
+    .share-action-btn.ok { color: var(--green); }
+    .share-error { font-size: 12px; color: var(--red); padding: 0.75rem; border: 1px solid var(--red); }
+    .share-error::before { content: "err: "; opacity: 0.6; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+<div class="share-wrap">
+  <div class="share-inner">
+    <div class="share-logo"><a href="/">[ frog pond // 俳句 ]</a></div>
+    <div id="share-error" class="share-error hidden">this link looks broken.</div>
+    <div id="share-box" class="share-box hidden">
+      <div class="share-bar">
+        <span>output.haiku</span>
+        <span style="color:var(--green)">✓ generated</span>
+      </div>
+      <div class="share-body">
+        <div id="share-source" class="share-source hidden"></div>
+        <div id="share-lines"></div>
+        <div id="share-syl" class="share-syl-bars hidden"></div>
+      </div>
+    </div>
+    <div id="share-actions" class="share-actions hidden">
+      <button class="share-action-btn" id="copy-haiku">cp ./haiku</button>
+      <button class="share-action-btn" id="copy-link">share --link</button>
+      <a class="share-action-btn" href="/">./new</a>
+    </div>
+  </div>
+</div>
+<script>
+  function esc(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  function sylBar(count, total) {
+    const f = Math.min(count ?? total, total);
+    return '<span class="share-syl-filled">' + '█'.repeat(f) + '</span>' + '░'.repeat(total - f);
+  }
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const encoded = params.get('h');
+    if (!encoded) throw new Error('no data');
+    const data = JSON.parse(atob(encoded));
+    const { line1, line2, line3, s1, s2, s3, source } = data;
+    if (!line1 || !line2 || !line3) throw new Error('bad data');
+
+    document.title = esc(line1) + ' / ' + esc(line2) + ' / ' + esc(line3) + ' — frog pond';
+
+    if (source) {
+      const el = document.getElementById('share-source');
+      el.textContent = source.length > 80 ? source.slice(0, 80) + '…' : source;
+      el.classList.remove('hidden');
+    }
+
+    const linesEl = document.getElementById('share-lines');
+    [[line1,s1??5,5],[line2,s2??7,7],[line3,s3??5,5]].forEach(([line, count, total]) => {
+      const row = document.createElement('div');
+      row.className = 'share-line-row';
+      row.innerHTML = '<span class="share-line-num">' + total + '</span><span class="share-line-text">' + esc(line) + '</span>';
+      linesEl.appendChild(row);
+    });
+
+    const sylEl = document.getElementById('share-syl');
+    [[s1??5,5],[s2??7,7],[s3??5,5]].forEach(([c,t]) => {
+      const span = document.createElement('span');
+      span.innerHTML = sylBar(c, t);
+      sylEl.appendChild(span);
+    });
+    sylEl.classList.remove('hidden');
+
+    document.getElementById('share-box').classList.remove('hidden');
+    document.getElementById('share-actions').classList.remove('hidden');
+
+    const fullText = line1 + '\\n' + line2 + '\\n' + line3;
+
+    document.getElementById('copy-haiku').addEventListener('click', function() {
+      navigator.clipboard.writeText(fullText + '\\n\\n-- frogpond.lol').then(() => {
+        this.textContent = '// copied!'; this.classList.add('ok');
+        setTimeout(() => { this.textContent = 'cp ./haiku'; this.classList.remove('ok'); }, 1800);
+      });
+    });
+    document.getElementById('copy-link').addEventListener('click', function() {
+      navigator.clipboard.writeText(window.location.href).then(() => {
+        this.textContent = '// link copied!'; this.classList.add('ok');
+        setTimeout(() => { this.textContent = 'share --link'; this.classList.remove('ok'); }, 1800);
+      });
+    });
+  } catch(e) {
+    document.getElementById('share-error').classList.remove('hidden');
+  }
+</script>
+</body>
+</html>`);
+};
+
+function esc(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
