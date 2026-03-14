@@ -6,8 +6,8 @@
   --bg:      #f7f3ea;
   --surface: #f0ebe0;
   --border:  #c8bfa8;
-  --dim:     #a89880;
-  --mid:     #6a5c48;
+  --dim:     #887050;
+  --mid:     #554430;
   --text:    #2c2418;
   --accent:  #4a6a30;
   --green:   #3a6020;
@@ -21,7 +21,7 @@
   --bg:      #0f0f0f;
   --surface: #161616;
   --border:  #2a2a2a;
-  --dim:     #3d3d3d;
+  --dim:     #555;
   --mid:     #888;
   --text:    #d4d0c8;
   --accent:  #7aaa50;
@@ -83,12 +83,20 @@ body::before {
   opacity: 0.75;
 }
 .header-ascii {
-  font-size: 10.5px;
+  font-size: 12px;
   line-height: 1.35;
   color: var(--text);
   white-space: pre;
   overflow-x: auto;
   letter-spacing: 0;
+}
+.header-title-fallback {
+  display: none;
+  font-size: 20px;
+  font-weight: bold;
+  font-family: var(--mono);
+  color: var(--text);
+  letter-spacing: 0.05em;
 }
 .header-meta {
   margin-top: 0.85rem;
@@ -97,16 +105,17 @@ body::before {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 11px;
+  font-size: 13px;
 }
 .header-meta .comment { color: var(--mid); }
 .header-meta .version { color: var(--dim); }
 
 /* ── Ko-fi ── */
 .kofi-line {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--dim);
   margin-bottom: 1.75rem;
+  margin-top: 0.5rem;
 }
 .kofi-line a {
   color: var(--mid);
@@ -129,7 +138,7 @@ body::before {
   border-right: 1px solid var(--border);
   color: var(--dim);
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
   text-align: left;
   transition: color 0.1s, background 0.1s;
@@ -146,7 +155,7 @@ body::before {
 .file-bar {
   padding: 0.35rem 0.75rem;
   border-bottom: 1px solid var(--border);
-  font-size: 11px;
+  font-size: 13px;
   color: var(--dim);
   display: flex;
   justify-content: space-between;
@@ -187,8 +196,8 @@ body::before {
   width: 100%; height: 100%;
 }
 .dropzone-icon { font-size: 14px; margin-bottom: 0.5rem; opacity: 0.4; }
-.dropzone p { font-size: 12px; color: var(--mid); }
-.dropzone small { font-size: 11px; color: var(--dim); margin-top: 4px; display: block; }
+.dropzone p { font-size: 13px; color: var(--mid); }
+.dropzone small { font-size: 13px; color: var(--dim); margin-top: 4px; display: block; }
 
 .preview-wrap { position: relative; }
 .preview-wrap img {
@@ -200,19 +209,19 @@ body::before {
   position: absolute; top: 8px; right: 8px;
   background: var(--bg); border: 1px solid var(--border);
   color: var(--mid); font-family: var(--mono);
-  font-size: 11px; padding: 3px 8px; cursor: pointer;
+  font-size: 13px; padding: 3px 8px; cursor: pointer;
 }
 
 /* ── Tone ── */
 .tone-row {
   display: flex;
   border: 1px solid var(--border);
-  margin-bottom: 1.25rem;
+  margin-bottom: 0.5rem;
 }
 .tone-label {
   padding: 0.5rem 0.75rem;
   border-right: 1px solid var(--border);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--dim);
   white-space: nowrap;
   user-select: none;
@@ -222,11 +231,36 @@ body::before {
   background: transparent; border: none;
   border-right: 1px solid var(--border);
   color: var(--dim); font-family: var(--mono);
-  font-size: 12px; cursor: pointer;
+  font-size: 13px; cursor: pointer;
   transition: color 0.1s, background 0.1s;
 }
 .tone-btn:last-child { border-right: none; }
 .tone-btn.active { background: var(--surface); color: var(--accent); }
+
+/* ── Tone description ── */
+.tone-description {
+  font-size: 12px;
+  color: var(--dim);
+  font-style: italic;
+  margin-bottom: 1.25rem;
+  padding-left: 0.6rem;
+  border-left: 2px solid var(--border);
+  min-height: 1.4em;
+}
+.tone-description::before { content: "// "; opacity: 0.7; }
+
+/* ── Random button ── */
+.random-btn {
+  width: 100%; padding: 0.65rem;
+  background: transparent;
+  border: 1px solid var(--dim);
+  color: var(--mid);
+  font-family: var(--mono); font-size: 13px;
+  cursor: pointer; letter-spacing: 0.06em;
+  transition: background 0.1s, color 0.1s;
+  margin-bottom: 1rem;
+}
+.random-btn:hover { background: rgba(85,68,48,0.05); color: var(--text); }
 
 /* ── Convert button ── */
 .convert-btn {
@@ -245,7 +279,7 @@ body::before {
 /* ── Loading ── */
 .loading {
   text-align: center; padding: 1.5rem 0 2rem;
-  font-size: 12px; color: var(--dim); letter-spacing: 0.1em;
+  font-size: 13px; color: var(--dim); letter-spacing: 0.1em;
 }
 @keyframes blink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
 .cursor {
@@ -256,7 +290,7 @@ body::before {
 
 /* ── Error ── */
 .error-msg {
-  font-size: 12px; color: var(--red);
+  font-size: 13px; color: var(--red);
   padding: 0.75rem; border: 1px solid var(--red);
   margin-bottom: 1rem;
 }
@@ -316,7 +350,7 @@ body::before {
   background: transparent; border: none;
   border-right: 1px solid var(--border);
   color: var(--mid); font-family: var(--mono);
-  font-size: 11px; cursor: pointer;
+  font-size: 13px; cursor: pointer;
   text-align: center;
   transition: color 0.1s, background 0.1s;
   white-space: nowrap;
@@ -331,7 +365,7 @@ body::before {
   background: transparent;
   border: 1px solid var(--border); border-top: none;
   color: var(--dim); font-family: var(--mono);
-  font-size: 11px; cursor: pointer; letter-spacing: 0.06em;
+  font-size: 13px; cursor: pointer; letter-spacing: 0.06em;
   transition: color 0.1s; margin-bottom: 2rem;
 }
 .regen-btn:hover { color: var(--mid); }
@@ -340,14 +374,14 @@ body::before {
 .history-section { margin-top: 2.5rem; }
 .history-header {
   display: flex; justify-content: space-between; align-items: center;
-  font-size: 11px; padding: 0.35rem 0.75rem;
+  font-size: 13px; padding: 0.35rem 0.75rem;
   border: 1px solid var(--border); border-bottom: none;
   background: rgba(0,0,0,0.02);
 }
 .history-comment { color: var(--dim); }
 .history-clear {
   background: none; border: none; color: var(--dim);
-  font-size: 11px; font-family: var(--mono);
+  font-size: 13px; font-family: var(--mono);
   cursor: pointer; padding: 0; transition: color 0.1s;
 }
 .history-clear:hover { color: var(--red); }
@@ -364,11 +398,11 @@ body::before {
 
 .history-lines {
   font-family: var(--serif); font-style: italic;
-  font-size: 12px; color: var(--mid);
+  font-size: 13px; color: var(--mid);
   line-height: 1.5; flex: 1; min-width: 0;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.history-date { font-size: 10px; color: var(--dim); white-space: nowrap; }
+.history-date { font-size: 13px; color: var(--dim); white-space: nowrap; }
 
 /* ── Hidden ── */
 .hidden { display: none !important; }
@@ -382,10 +416,17 @@ body::before {
   border: 1px solid var(--border);
   color: var(--dim);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 13px;
   padding: 0.3rem 0.6rem;
   cursor: pointer;
   z-index: 100;
   transition: color 0.1s, border-color 0.1s;
 }
 .theme-toggle:hover { color: var(--accent); border-color: var(--accent); }
+
+/* ── Mobile ── */
+@media (max-width: 480px) {
+  .header-ascii { display: none; }
+  .header-frog { font-size: 12px; }
+  .header-title-fallback { display: block; }
+}
