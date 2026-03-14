@@ -16,12 +16,25 @@
   --serif:   'IM Fell English', Georgia, serif;
 }
 
+/* ── Dark mode ── */
+[data-theme="dark"] {
+  --bg:      #0f0f0f;
+  --surface: #161616;
+  --border:  #2a2a2a;
+  --dim:     #3d3d3d;
+  --mid:     #888;
+  --text:    #d4d0c8;
+  --accent:  #7aaa50;
+  --green:   #5a9a40;
+  --red:     #aa5050;
+}
+
 html, body {
   min-height: 100%;
   background: var(--bg);
   color: var(--text);
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
 }
@@ -277,10 +290,10 @@ body::before {
   display: flex; gap: 1rem;
   align-items: baseline; margin-bottom: 0.3rem;
 }
-.haiku-line-num { font-size: 10px; color: var(--dim); width: 12px; flex-shrink: 0; user-select: none; }
+.haiku-line-num { font-size: 11px; color: var(--dim); width: 14px; flex-shrink: 0; user-select: none; }
 .haiku-line-text {
   font-family: var(--serif); font-style: italic;
-  font-size: 19px; color: var(--text);
+  font-size: 22px; color: var(--text);
   line-height: 1.5; letter-spacing: 0.01em;
 }
 
@@ -359,3 +372,20 @@ body::before {
 
 /* ── Hidden ── */
 .hidden { display: none !important; }
+
+/* ── Dark mode toggle ── */
+.theme-toggle {
+  position: fixed;
+  top: 1rem;
+  right: 1.25rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+  z-index: 100;
+  transition: color 0.1s, border-color 0.1s;
+}
+.theme-toggle:hover { color: var(--accent); border-color: var(--accent); }

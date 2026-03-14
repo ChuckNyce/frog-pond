@@ -53,7 +53,27 @@ const TONES = {
   poetic:  'Find hidden beauty and quiet melancholy, like a classic Japanese poet. Wabi-sabi.',
 };
 
-// ── DOM ──
+// ── Dark mode ──
+function initTheme() {
+  const saved = localStorage.getItem('fp_theme');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const isDark = saved ? saved === 'dark' : prefersDark;
+  setTheme(isDark ? 'dark' : 'light');
+}
+
+function setTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  const btn = document.getElementById('theme-toggle');
+  if (btn) btn.textContent = t === 'dark' ? '[ light ]' : '[ dark ]';
+  localStorage.setItem('fp_theme', t);
+}
+
+document.getElementById('theme-toggle').addEventListener('click', () => {
+  const current = document.documentElement.getAttribute('data-theme');
+  setTheme(current === 'dark' ? 'light' : 'dark');
+});
+
+
 const $ = id => document.getElementById(id);
 const tabText        = $('tab-text');
 const tabImage       = $('tab-image');
@@ -77,6 +97,7 @@ const historyClear   = $('history-clear');
 
 // ── Init ──
 function init() {
+  initTheme();
   updateConvertBtn();
   renderHistory();
 }
@@ -228,8 +249,14 @@ async function parseAndConvertImage(b64, mime) {
   const extractRaw = await callClaude({
     system: `Extract individual social media posts from a screenshot.
 Respond ONLY with a raw JSON array — no markdown, no backticks.
-Format: [{"author":"username or empty","text":"post text"},...]
-Include all visible posts top to bottom. Skip unreadable text.`,
+Format: [{"author":"username or empty string","text":"full post text"},...]
+Rules:
+- Capture the COMPLETE text of each post — do not truncate or summarise
+- Multi-line and multi-paragraph posts should be captured in full with newlines preserved
+- Include all visible posts in order, top to bottom
+- If a post is a reply, include it as a separate item
+- Skip UI elements, timestamps, like counts — only post text and author
+- If text is unreadable, skip that post entirely`,
     messages: [{
       role: 'user',
       content: [
@@ -260,15 +287,16 @@ Same order as input. Count syllables carefully. All lines lowercase. ${TONES[ton
   })).filter(r => r.haiku);
 }
 
-// ── Share URL ──
+// ── Share URL — lean payload, no source or syl counts to keep URLs short ──
 function makeShareUrl(haiku, source, t) {
   const payload = {
-    line1: haiku.line1, line2: haiku.line2, line3: haiku.line3,
-    s1: haiku.s1, s2: haiku.s2, s3: haiku.s3,
-    source, tone: t
+    line1: haiku.line1,
+    line2: haiku.line2,
+    line3: haiku.line3,
+    tone: t,
   };
   const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
-  return `${location.origin}/share.html?h=${encoded}`;
+  return `${location.origin}/share?h=${encoded}`;
 }
 
 // ── History ──
