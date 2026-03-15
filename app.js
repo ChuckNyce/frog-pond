@@ -430,17 +430,6 @@ async function generateHaikuImage(haiku, source) {
   const totalContentHeight = srcHeight + 3 * lineHeight + barTopMargin + 18;
   let y = Math.max(180, Math.min(400, (H - totalContentHeight) / 2));
 
-  // ── Fixed top-right: ASCII frog mascot, 40% opacity ──
-  ctx.save();
-  ctx.globalAlpha = 0.4;
-  ctx.fillStyle = accent;
-  ctx.font = `16px ${mono}`;
-  ctx.textBaseline = 'top';
-  ['  @..@  ', ' (----) ', '( >__< )', ' ^^  ^^ '].forEach((line, i) => {
-    ctx.fillText(line, RIGHT - ctx.measureText(line).width, 80 + i * 20);
-  });
-  ctx.restore();
-
   // ── Source text ──
   if (srcLines.length > 0) {
     ctx.font = `20px ${mono}`;
@@ -486,12 +475,34 @@ async function generateHaikuImage(haiku, source) {
     if (i < barData.length - 1) barX += ctx.measureText(filledStr + unfilledStr).width + 25;
   });
 
-  // ── Fixed bottom: branding ──
+  // ── Fixed bottom: frog + branding ──
+  const frogLines = ['  @..@  ', ' (----) ', '( >__< )', ' ^^  ^^ '];
+  const frogFontSize = 14;
+  const frogLineH = 17;
+  const frogBlockH = frogLines.length * frogLineH;
+  const brandGap = 16;
+  ctx.font = `${frogFontSize}px ${mono}`;
+  let frogW = 0;
+  frogLines.forEach(line => { frogW = Math.max(frogW, ctx.measureText(line).width); });
+  ctx.font = `20px ${mono}`;
+  const brandText = 'frogpond.lol';
+  const brandW = ctx.measureText(brandText).width;
+  const unitW = frogW + brandGap + brandW;
+  const unitX = (W - unitW) / 2;
+  const frogTopY = H - 60 - frogBlockH;
+  ctx.save();
+  ctx.globalAlpha = 0.4;
+  ctx.fillStyle = accent;
+  ctx.font = `${frogFontSize}px ${mono}`;
+  ctx.textBaseline = 'top';
+  frogLines.forEach((line, i) => {
+    ctx.fillText(line, unitX, frogTopY + i * frogLineH);
+  });
+  ctx.restore();
   ctx.font = `20px ${mono}`;
   ctx.fillStyle = dim;
-  ctx.textBaseline = 'bottom';
-  const brandText = 'frogpond.lol';
-  ctx.fillText(brandText, (W - ctx.measureText(brandText).width) / 2, 1010);
+  ctx.textBaseline = 'middle';
+  ctx.fillText(brandText, unitX + frogW + brandGap, frogTopY + frogBlockH / 2);
 
   return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
 }
