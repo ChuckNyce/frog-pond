@@ -202,7 +202,7 @@ body::before {
 .preview-wrap { position: relative; }
 .preview-wrap img {
   width: 100%; display: block;
-  max-height: 280px; object-fit: cover; object-position: top;
+  max-height: 400px; object-fit: contain; object-position: center;
   opacity: 0.9;
 }
 .preview-clear {
