@@ -177,7 +177,7 @@
     const fullText = `${line1}\n${line2}\n${line3}`;
 
     document.getElementById('copy-haiku').addEventListener('click', function() {
-      navigator.clipboard.writeText(fullText + '\n\n-- frogpond.app').then(() => {
+      navigator.clipboard.writeText(fullText + '\n\n-- frogpond.lol').then(() => {
         this.textContent = '// copied!'; this.classList.add('ok');
         setTimeout(() => { this.textContent = 'copy haiku'; this.classList.remove('ok'); }, 1800);
       });
