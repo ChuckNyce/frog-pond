@@ -1,4 +1,4 @@
-const CACHE = 'frog-pond-v4';
+const CACHE = 'frog-pond-v5';
 const ASSETS = ['/', '/index.html', '/app.js', '/style.css', '/manifest.json'];
 
 self.addEventListener('install', e => {
