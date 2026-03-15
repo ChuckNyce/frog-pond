@@ -177,7 +177,7 @@
     const fullText = `${line1}\n${line2}\n${line3}`;
 
     document.getElementById('copy-haiku').addEventListener('click', function() {
-      navigator.clipboard.writeText(fullText + '\n\n-- frogpond.app').then(() => {
+      navigator.clipboard.writeText(fullText + '\n\n-- frogpond.lol').then(() => {
         this.textContent = '// copied!'; this.classList.add('ok');
         setTimeout(() => { this.textContent = 'copy haiku'; this.classList.remove('ok'); }, 1800);
       });
@@ -202,7 +202,7 @@
         cvs.width = W; cvs.height = H;
         const ctx = cvs.getContext('2d');
 
-        const bgC = '#f7f3ea', textC = '#2c2418', dimC = '#887050', accentC = '#4a6a30', borderC = '#c8bfa8';
+        const bgC = '#f7f3ea', textC = '#2c2418', dimC = '#6b573a', accentC = '#4a6a30', borderC = '#c8bfa8';
         const monoF = "'Courier New', monospace", serifF = "'IM Fell English', Georgia, serif";
 
         ctx.fillStyle = bgC; ctx.fillRect(0, 0, W, H);

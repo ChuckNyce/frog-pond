@@ -652,7 +652,7 @@ function makeCard(r, idx) {
     btn.addEventListener('click', function() {
       const orig = this.textContent;
       if (this.dataset.copy) {
-        navigator.clipboard.writeText(this.dataset.copy + '\n\n-- frogpond.app').then(() => {
+        navigator.clipboard.writeText(this.dataset.copy + '\n\n-- frogpond.lol').then(() => {
           this.textContent = '// copied!'; this.classList.add('ok');
           setTimeout(() => { this.textContent = orig; this.classList.remove('ok'); }, 1800);
           if (window.posthog) {
