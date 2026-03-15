@@ -239,16 +239,6 @@
         var totalH = srcHeight + 3 * lineH + barTopMargin + 18;
         var y = Math.max(180, Math.min(400, (H - totalH) / 2));
 
-        // ── Fixed top-right: ASCII frog, 40% opacity ──
-        ctx.save();
-        ctx.globalAlpha = 0.4;
-        ctx.fillStyle = accentC;
-        ctx.font = '16px ' + monoF; ctx.textBaseline = 'top';
-        ['  @..@  ', ' (----) ', '( >__< )', ' ^^  ^^ '].forEach(function(line, i) {
-          ctx.fillText(line, RIGHT - ctx.measureText(line).width, 80 + i * 20);
-        });
-        ctx.restore();
-
         // ── Source text ──
         if (srcLines.length > 0) {
           ctx.font = '20px ' + monoF; ctx.fillStyle = dimC; ctx.textBaseline = 'top';
@@ -277,10 +267,28 @@
           if (i < 2) barX += ctx.measureText(fStr + uStr).width + 25;
         });
 
-        // ── Fixed bottom: branding ──
-        ctx.font = '20px ' + monoF; ctx.fillStyle = dimC; ctx.textBaseline = 'bottom';
+        // ── Fixed bottom: frog + branding ──
+        var frogLines = ['  @..@  ', ' (----) ', '( >__< )', ' ^^  ^^ '];
+        var frogFontSize = 14, frogLineH = 17, frogBlockH = frogLines.length * frogLineH, brandGap = 16;
+        ctx.font = frogFontSize + 'px ' + monoF;
+        var frogW = 0;
+        frogLines.forEach(function(line) { frogW = Math.max(frogW, ctx.measureText(line).width); });
+        ctx.font = '20px ' + monoF;
         var brand = 'frogpond.lol';
-        ctx.fillText(brand, (W - ctx.measureText(brand).width) / 2, 1010);
+        var brandW = ctx.measureText(brand).width;
+        var unitW = frogW + brandGap + brandW;
+        var unitX = (W - unitW) / 2;
+        var frogTopY = H - 60 - frogBlockH;
+        ctx.save();
+        ctx.globalAlpha = 0.4;
+        ctx.fillStyle = accentC;
+        ctx.font = frogFontSize + 'px ' + monoF; ctx.textBaseline = 'top';
+        frogLines.forEach(function(line, i) {
+          ctx.fillText(line, unitX, frogTopY + i * frogLineH);
+        });
+        ctx.restore();
+        ctx.font = '20px ' + monoF; ctx.fillStyle = dimC; ctx.textBaseline = 'middle';
+        ctx.fillText(brand, unitX + frogW + brandGap, frogTopY + frogBlockH / 2);
 
         cvs.toBlob(async function(blob) {
           try {
