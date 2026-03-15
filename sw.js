@@ -1,4 +1,4 @@
-const CACHE = 'frog-pond-v1';
+const CACHE = 'frog-pond-v2';
 const ASSETS = ['/', '/index.html', '/app.js', '/style.css', '/manifest.json'];
 
 self.addEventListener('install', e => {
@@ -14,7 +14,7 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  if (!e.request.url.includes('anthropic.com')) {
+  if (!e.request.url.includes('anthropic.com') && !e.request.url.includes('posthog.com')) {
     e.respondWith(
       caches.match(e.request).then(r => r || fetch(e.request))
     );
