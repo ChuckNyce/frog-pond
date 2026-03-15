@@ -203,7 +203,7 @@ module.exports = async function handler(req, res) {
         var cvs = document.createElement('canvas');
         cvs.width = W; cvs.height = H;
         var ctx = cvs.getContext('2d');
-        var bgC = '#f7f3ea', textC = '#2c2418', dimC = '#887050', accentC = '#4a6a30', borderC = '#c8bfa8';
+        var bgC = '#f7f3ea', textC = '#2c2418', dimC = '#6b573a', accentC = '#4a6a30', borderC = '#c8bfa8';
         var monoF = "'Courier New', monospace", serifF = "'IM Fell English', Georgia, serif";
         ctx.fillStyle = bgC; ctx.fillRect(0, 0, W, H);
         ctx.strokeStyle = borderC; ctx.lineWidth = 1; ctx.strokeRect(0.5, 0.5, W - 1, H - 1);
