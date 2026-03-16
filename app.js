@@ -279,9 +279,14 @@ async function convert() {
 
 // ── API call — hits our backend, not Anthropic directly ──
 async function callClaude({ system, messages }) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (localStorage.getItem('fp_admin') === 'true') {
+    headers['x-frog-admin'] = 'ribbit';
+  }
+
   const res = await fetch('/api/convert', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1500,
@@ -290,6 +295,7 @@ async function callClaude({ system, messages }) {
     }),
   });
 
+  if (res.status === 429) throw new Error('too many haiku, too fast.\nthe frog needs a moment.\ntry again shortly. 🐸');
   if (res.status === 500) throw new Error('server error — api key may not be configured.');
   if (!res.ok) throw new Error(`request failed (${res.status}). try again.`);
 

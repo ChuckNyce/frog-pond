@@ -139,7 +139,7 @@ module.exports = async function handler(req, res) {
   // Handle preflight
   if (req.method === 'OPTIONS') {
     res.setHeader('Access-Control-Allow-Methods', 'POST');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-frog-admin');
     return res.status(204).end();
   }
 
@@ -152,8 +152,11 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
+  // Admin bypass — skip rate limiting entirely
+  const isAdmin = req.headers['x-frog-admin'] === 'ribbit';
+
   // Rate limiting
-  const retryAfter = checkRateLimit(ip);
+  const retryAfter = isAdmin ? null : checkRateLimit(ip);
   if (retryAfter !== null) {
     console.log(`${timestamp} | ${maskedIp} | rate_limited=true | status=429`);
     res.setHeader('Retry-After', String(retryAfter));

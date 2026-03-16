@@ -156,6 +156,7 @@
   if (new URLSearchParams(window.location.search).get('admin') === 'true') {
     posthog.identify('bash0-admin');
     posthog.people.set({ is_admin: true });
+    localStorage.setItem('fp_admin', 'true');
     console.log('posthog: admin identified');
   }
 </script>
