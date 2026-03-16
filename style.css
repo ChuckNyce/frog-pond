@@ -424,6 +424,58 @@ body::before {
 }
 .theme-toggle:hover { color: var(--accent); border-color: var(--accent); }
 
+/* ── Social links ── */
+.social-row {
+  text-align: center;
+  font-size: 13px;
+  margin-bottom: 1.75rem;
+}
+.social-row a {
+  color: var(--mid);
+  text-decoration: none;
+  transition: color 0.1s;
+}
+.social-row a:hover {
+  color: var(--accent);
+}
+.social-sep {
+  color: var(--dim);
+  margin: 0 0.35rem;
+}
+
+.footer-links .social-row {
+  margin-bottom: 0.5rem;
+}
+
+/* ── Footer links ── */
+.footer-links {
+  text-align: center;
+  font-size: 11px;
+  padding: 2rem 0 1rem;
+  color: var(--dim);
+}
+.footer-links a {
+  color: var(--dim);
+  text-decoration: none;
+  transition: color 0.1s;
+}
+.footer-links a:hover {
+  color: var(--mid);
+}
+
+/* ── Policy content ── */
+.policy-content {
+  font-size: 13px;
+  color: var(--mid);
+  line-height: 1.8;
+}
+.policy-content p {
+  margin-bottom: 1.25rem;
+}
+.policy-content strong {
+  color: var(--text);
+}
+
 /* ── Mobile ── */
 @media (max-width: 480px) {
   .header-ascii { display: none; }
