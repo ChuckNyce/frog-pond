@@ -443,6 +443,10 @@ body::before {
   margin: 0 0.35rem;
 }
 
+.footer-links .social-row {
+  margin-bottom: 0.5rem;
+}
+
 /* ── Footer links ── */
 .footer-links {
   text-align: center;

@@ -133,16 +133,16 @@ module.exports = async function handler(req, res) {
       <a class="share-action-btn cta" href="/">make your own →</a>
     </div>
     <p class="share-tagline hidden" id="share-tagline">paste any post. get a haiku.</p>
-    <div class="social-row">
-      <a href="https://x.com/bash0frog" target="_blank" rel="noopener">x</a>
-      <span class="social-sep">/</span>
-      <a href="https://bsky.app/profile/frogpond.lol" target="_blank" rel="noopener">bluesky</a>
-      <span class="social-sep">/</span>
-      <a href="https://instagram.com/bash0frog" target="_blank" rel="noopener">instagram</a>
-      <span class="social-sep">/</span>
-      <a href="https://threads.net/@bash0frog" target="_blank" rel="noopener">threads</a>
-    </div>
     <div class="footer-links">
+      <div class="social-row">
+        <a href="https://x.com/bash0frog" target="_blank" rel="noopener">x</a>
+        <span class="social-sep">/</span>
+        <a href="https://bsky.app/profile/frogpond.lol" target="_blank" rel="noopener">bluesky</a>
+        <span class="social-sep">/</span>
+        <a href="https://instagram.com/bash0frog" target="_blank" rel="noopener">instagram</a>
+        <span class="social-sep">/</span>
+        <a href="https://threads.net/@bash0frog" target="_blank" rel="noopener">threads</a>
+      </div>
       <a href="/privacy">privacy</a>
       <span class="social-sep">/</span>
       <a href="/terms">terms</a>
