@@ -128,6 +128,7 @@ module.exports = async function handler(req, res) {
     </div>
     <div id="share-actions" class="share-actions hidden">
       <button class="share-action-btn" id="copy-haiku">copy haiku</button>
+      <button class="share-action-btn" id="download-image">download</button>
       <button class="share-action-btn" id="save-image">share</button>
       <button class="share-action-btn" id="copy-link">copy link</button>
       <a class="share-action-btn cta" href="/">make your own →</a>
@@ -155,7 +156,84 @@ module.exports = async function handler(req, res) {
   }
   function sylBar(count, total) {
     const f = Math.min(count ?? total, total);
-    return '<span class="share-syl-filled">' + '█'.repeat(f) + '</span>' + '░'.repeat(total - f);
+    return '<span class="share-syl-filled">' + String.fromCharCode(9608).repeat(f) + '</span>' + String.fromCharCode(9617).repeat(total - f);
+  }
+  function generateShareImage(line1, line2, line3, s1, s2, s3, source) {
+    var W = 1080, H = 1080;
+    var cvs = document.createElement('canvas');
+    cvs.width = W; cvs.height = H;
+    var ctx = cvs.getContext('2d');
+    var bgC = '#f7f3ea', textC = '#2c2418', dimC = '#6b573a', accentC = '#4a6a30', borderC = '#c8bfa8';
+    var monoF = "'Courier New', monospace", serifF = "'IM Fell English', Georgia, serif";
+    ctx.fillStyle = bgC; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = borderC; ctx.lineWidth = 1; ctx.strokeRect(0.5, 0.5, W - 1, H - 1);
+    var LEFT = 100, TEXT_LEFT = 140;
+    var srcLineH = 26, srcBottomMargin = 40, lineH = 70, barTopMargin = 30;
+    var srcLines = [];
+    if (source) {
+      ctx.font = '20px ' + monoF;
+      var MAX_W = W - 2 * LEFT;
+      var prefix = '// ', prefixW = ctx.measureText(prefix).width;
+      var words = source.split(' '), cur = '';
+      for (var wi = 0; wi < words.length; wi++) {
+        var test = cur ? cur + ' ' + words[wi] : words[wi];
+        var lineW = (srcLines.length === 0 ? prefixW : 0) + ctx.measureText(test).width;
+        if (lineW > MAX_W && cur) { srcLines.push(cur); if (srcLines.length === 3) { cur = ''; break; } cur = words[wi]; }
+        else { cur = test; }
+      }
+      if (cur && srcLines.length < 3) srcLines.push(cur);
+      if (srcLines.join(' ').length < source.replace(/\\s+/g, ' ').trim().length) {
+        var last = srcLines[srcLines.length - 1], isFirst = srcLines.length === 1;
+        while (last.length > 0 && (isFirst ? prefixW : 0) + ctx.measureText(last + '\\u2026').width > MAX_W) {
+          var sp = last.lastIndexOf(' '); last = sp > 0 ? last.slice(0, sp) : last.slice(0, -1);
+        }
+        srcLines[srcLines.length - 1] = last + '\\u2026';
+      }
+    }
+    var srcHeight = srcLines.length > 0 ? srcLines.length * srcLineH + srcBottomMargin : 0;
+    var totalH = srcHeight + 3 * lineH + barTopMargin + 18;
+    var y = Math.max(180, Math.min(400, (H - totalH) / 2));
+    if (srcLines.length > 0) {
+      ctx.font = '20px ' + monoF; ctx.fillStyle = dimC; ctx.textBaseline = 'top';
+      srcLines.forEach(function(lineText, i) { ctx.fillText(i === 0 ? '// ' + lineText : lineText, LEFT, y + i * srcLineH); });
+      y += srcLines.length * srcLineH + srcBottomMargin;
+    }
+    [[line1, 5], [line2, 7], [line3, 5]].forEach(function(p) {
+      ctx.font = '22px ' + monoF; ctx.fillStyle = dimC; ctx.textBaseline = 'top';
+      ctx.fillText(String(p[1]), LEFT, y + 16);
+      ctx.font = 'italic 52px ' + serifF; ctx.fillStyle = textC;
+      ctx.fillText(p[0], TEXT_LEFT, y); y += lineH;
+    });
+    y += barTopMargin;
+    ctx.font = '18px ' + monoF; ctx.textBaseline = 'top';
+    var barX = LEFT;
+    [[s1??5,5],[s2??7,7],[s3??5,5]].forEach(function(p, i) {
+      var filled = Math.min(p[0] ?? p[1], p[1]);
+      var fStr = String.fromCharCode(9608).repeat(filled);
+      var uStr = String.fromCharCode(9617).repeat(p[1] - filled);
+      ctx.fillStyle = accentC; ctx.fillText(fStr, barX, y);
+      ctx.fillStyle = borderC; ctx.fillText(uStr, barX + ctx.measureText(fStr).width, y);
+      if (i < 2) barX += ctx.measureText(fStr + uStr).width + 25;
+    });
+    var frogLines = ['  @..@  ', ' (----) ', '( >__< )', ' ^^  ^^ '];
+    var frogFontSize = 14, frogLineH2 = 17, frogBlockH = frogLines.length * frogLineH2, brandGap = 16;
+    ctx.font = frogFontSize + 'px ' + monoF;
+    var frogW = 0;
+    frogLines.forEach(function(line) { frogW = Math.max(frogW, ctx.measureText(line).width); });
+    ctx.font = '20px ' + monoF;
+    var brand = 'frogpond.lol';
+    var brandW = ctx.measureText(brand).width;
+    var unitW = frogW + brandGap + brandW;
+    var unitX = (W - unitW) / 2;
+    var frogTopY = H - 60 - frogBlockH;
+    ctx.save();
+    ctx.globalAlpha = 0.4; ctx.fillStyle = accentC;
+    ctx.font = frogFontSize + 'px ' + monoF; ctx.textBaseline = 'top';
+    frogLines.forEach(function(line, i) { ctx.fillText(line, unitX, frogTopY + i * frogLineH2); });
+    ctx.restore();
+    ctx.font = '20px ' + monoF; ctx.fillStyle = dimC; ctx.textBaseline = 'middle';
+    ctx.fillText(brand, unitX + frogW + brandGap, frogTopY + frogBlockH / 2);
+    return new Promise(function(resolve) { cvs.toBlob(resolve, 'image/png'); });
   }
   try {
     const params = new URLSearchParams(window.location.search);
@@ -208,114 +286,44 @@ module.exports = async function handler(req, res) {
       });
     });
 
+    document.getElementById('download-image').addEventListener('click', async function() {
+      var btn = this;
+      btn.textContent = '// generating...'; btn.classList.add('ok');
+      try {
+        await document.fonts.ready;
+        var blob = await generateShareImage(line1, line2, line3, s1, s2, s3, source);
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url; a.download = 'haiku-frogpond.png';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        btn.textContent = '// done!';
+        setTimeout(function() { btn.textContent = 'download'; btn.classList.remove('ok'); }, 1800);
+      } catch(e) { btn.textContent = 'download'; btn.classList.remove('ok'); }
+    });
+
     document.getElementById('save-image').addEventListener('click', async function() {
       var btn = this, orig = btn.textContent;
       btn.textContent = '// generating...'; btn.classList.add('ok');
       try {
         await document.fonts.ready;
-        var W = 1080, H = 1080;
-        var cvs = document.createElement('canvas');
-        cvs.width = W; cvs.height = H;
-        var ctx = cvs.getContext('2d');
-        var bgC = '#f7f3ea', textC = '#2c2418', dimC = '#6b573a', accentC = '#4a6a30', borderC = '#c8bfa8';
-        var monoF = "'Courier New', monospace", serifF = "'IM Fell English', Georgia, serif";
-        ctx.fillStyle = bgC; ctx.fillRect(0, 0, W, H);
-        ctx.strokeStyle = borderC; ctx.lineWidth = 1; ctx.strokeRect(0.5, 0.5, W - 1, H - 1);
-        var LEFT = 100, RIGHT = W - LEFT, TEXT_LEFT = 140;
-        var srcLineH = 26, srcBottomMargin = 40, lineH = 70, barTopMargin = 30;
-        // ── Measure source text lines ──
-        var srcLines = [];
-        if (source) {
-          ctx.font = '20px ' + monoF;
-          var MAX_W = W - 2 * LEFT;
-          var prefix = '// ', prefixW = ctx.measureText(prefix).width;
-          var words = source.split(' '), cur = '';
-          for (var wi = 0; wi < words.length; wi++) {
-            var test = cur ? cur + ' ' + words[wi] : words[wi];
-            var lineW = (srcLines.length === 0 ? prefixW : 0) + ctx.measureText(test).width;
-            if (lineW > MAX_W && cur) { srcLines.push(cur); if (srcLines.length === 3) { cur = ''; break; } cur = words[wi]; }
-            else { cur = test; }
-          }
-          if (cur && srcLines.length < 3) srcLines.push(cur);
-          if (srcLines.join(' ').length < source.replace(/\\s+/g, ' ').trim().length) {
-            var last = srcLines[srcLines.length - 1], isFirst = srcLines.length === 1;
-            while (last.length > 0 && (isFirst ? prefixW : 0) + ctx.measureText(last + '\\u2026').width > MAX_W) {
-              var sp = last.lastIndexOf(' '); last = sp > 0 ? last.slice(0, sp) : last.slice(0, -1);
-            }
-            srcLines[srcLines.length - 1] = last + '\\u2026';
-          }
-        }
-        // ── Calculate startY — vertically centered, clamped ──
-        var srcHeight = srcLines.length > 0 ? srcLines.length * srcLineH + srcBottomMargin : 0;
-        var totalH = srcHeight + 3 * lineH + barTopMargin + 18;
-        var y = Math.max(180, Math.min(400, (H - totalH) / 2));
-        // ── Source text ──
-        if (srcLines.length > 0) {
-          ctx.font = '20px ' + monoF; ctx.fillStyle = dimC; ctx.textBaseline = 'top';
-          srcLines.forEach(function(lineText, i) { ctx.fillText(i === 0 ? '// ' + lineText : lineText, LEFT, y + i * srcLineH); });
-          y += srcLines.length * srcLineH + srcBottomMargin;
-        }
-        // ── Haiku lines ──
-        [[line1, 5], [line2, 7], [line3, 5]].forEach(function(p) {
-          ctx.font = '22px ' + monoF; ctx.fillStyle = dimC; ctx.textBaseline = 'top';
-          ctx.fillText(String(p[1]), LEFT, y + 16);
-          ctx.font = 'italic 52px ' + serifF; ctx.fillStyle = textC;
-          ctx.fillText(p[0], TEXT_LEFT, y); y += lineH;
-        });
-        // ── Syllable bars ──
-        y += barTopMargin;
-        ctx.font = '18px ' + monoF; ctx.textBaseline = 'top';
-        var barX = LEFT;
-        [[s1??5,5],[s2??7,7],[s3??5,5]].forEach(function(p, i) {
-          var filled = Math.min(p[0] ?? p[1], p[1]);
-          var fStr = String.fromCharCode(9608).repeat(filled);
-          var uStr = String.fromCharCode(9617).repeat(p[1] - filled);
-          ctx.fillStyle = accentC; ctx.fillText(fStr, barX, y);
-          ctx.fillStyle = borderC; ctx.fillText(uStr, barX + ctx.measureText(fStr).width, y);
-          if (i < 2) barX += ctx.measureText(fStr + uStr).width + 25;
-        });
-        // ── Fixed bottom: frog + branding ──
-        var frogLines = ['  @..@  ', ' (----) ', '( >__< )', ' ^^  ^^ '];
-        var frogFontSize = 14, frogLineH = 17, frogBlockH = frogLines.length * frogLineH, brandGap = 16;
-        ctx.font = frogFontSize + 'px ' + monoF;
-        var frogW = 0;
-        frogLines.forEach(function(line) { frogW = Math.max(frogW, ctx.measureText(line).width); });
-        ctx.font = '20px ' + monoF;
-        var brand = 'frogpond.lol';
-        var brandW = ctx.measureText(brand).width;
-        var unitW = frogW + brandGap + brandW;
-        var unitX = (W - unitW) / 2;
-        var frogTopY = H - 60 - frogBlockH;
-        ctx.save();
-        ctx.globalAlpha = 0.4;
-        ctx.fillStyle = accentC;
-        ctx.font = frogFontSize + 'px ' + monoF; ctx.textBaseline = 'top';
-        frogLines.forEach(function(line, i) {
-          ctx.fillText(line, unitX, frogTopY + i * frogLineH);
-        });
-        ctx.restore();
-        ctx.font = '20px ' + monoF; ctx.fillStyle = dimC; ctx.textBaseline = 'middle';
-        ctx.fillText(brand, unitX + frogW + brandGap, frogTopY + frogBlockH / 2);
-        cvs.toBlob(async function(blob) {
-          try {
-            if (navigator.share && navigator.canShare) {
-              var file = new File([blob], 'haiku-frogpond.png', { type: 'image/png' });
-              if (navigator.canShare({ files: [file] })) {
-                await navigator.share({ files: [file], title: 'haiku \\u2014 frogpond.lol' });
-                btn.textContent = '// shared!';
-                setTimeout(function() { btn.textContent = orig; btn.classList.remove('ok'); }, 1800);
-                return;
-              }
-            }
-            var url = URL.createObjectURL(blob);
-            var a = document.createElement('a');
-            a.href = url; a.download = 'haiku-frogpond.png';
-            document.body.appendChild(a); a.click(); document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+        var blob = await generateShareImage(line1, line2, line3, s1, s2, s3, source);
+        if (navigator.share && navigator.canShare) {
+          var file = new File([blob], 'haiku-frogpond.png', { type: 'image/png' });
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], title: 'haiku \\u2014 frogpond.lol' });
             btn.textContent = '// shared!';
             setTimeout(function() { btn.textContent = orig; btn.classList.remove('ok'); }, 1800);
-          } catch(e) { btn.textContent = orig; btn.classList.remove('ok'); }
-        }, 'image/png');
+            return;
+          }
+        }
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url; a.download = 'haiku-frogpond.png';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        btn.textContent = '// shared!';
+        setTimeout(function() { btn.textContent = orig; btn.classList.remove('ok'); }, 1800);
       } catch(e) { btn.textContent = orig; btn.classList.remove('ok'); }
     });
   } catch(e) {

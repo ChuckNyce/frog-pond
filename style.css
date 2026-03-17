@@ -359,6 +359,66 @@ body::before {
 .action-btn:hover { color: var(--accent); background: rgba(74,106,48,0.04); }
 .action-btn.ok { color: var(--green); }
 
+/* ── Share panel ── */
+.share-panel {
+  border: 1px solid var(--border);
+  border-top: none;
+  background: var(--surface);
+  padding: 0.75rem;
+}
+.share-formats {
+  display: flex;
+  border: 1px solid var(--border);
+  margin-bottom: 0.75rem;
+}
+.share-fmt-btn {
+  flex: 1;
+  padding: 0.45rem 0.5rem;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border);
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: center;
+  transition: color 0.1s, background 0.1s;
+}
+.share-fmt-btn:last-child { border-right: none; }
+.share-fmt-btn.active { background: var(--surface); color: var(--accent); }
+.share-preview {
+  margin-bottom: 0.75rem;
+  text-align: center;
+}
+.share-preview img {
+  max-width: 100%;
+  max-height: 400px;
+  border: 1px solid var(--border);
+}
+.share-actions-row {
+  display: flex;
+  border: 1px solid var(--border);
+}
+.share-download-btn, .share-native-btn {
+  flex: 1;
+  padding: 0.5rem;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border);
+  color: var(--mid);
+  font-family: var(--mono);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: center;
+  transition: color 0.1s, background 0.1s;
+}
+.share-native-btn { border-right: none; }
+.share-download-btn:hover, .share-native-btn:hover {
+  color: var(--accent);
+  background: rgba(74,106,48,0.04);
+}
+.share-download-btn.ok, .share-native-btn.ok { color: var(--green); }
+
 /* ── Regen ── */
 .regen-btn {
   width: 100%; padding: 0.55rem;
