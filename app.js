@@ -246,12 +246,15 @@ async function convert() {
 
   try {
     let results;
+    const capturedImageB64 = imageB64;
+    const capturedImageMime = imageMime;
     if (mode === 'text') {
       const text = tweetArea.value.trim();
       const haiku = await convertText(text);
-      results = [{ source: text.slice(0, 80), fullSource: text, haiku, tone }];
+      results = [{ source: text.slice(0, 80), fullSource: text, haiku, tone, sourceImageB64: null, sourceMime: null }];
     } else {
       results = await parseAndConvertImage(imageB64, imageMime);
+      results.forEach(r => { r.sourceImageB64 = capturedImageB64; r.sourceMime = capturedImageMime; });
     }
     saveToHistory(results);
     if (window.posthog) {
@@ -550,6 +553,329 @@ async function saveHaikuImage(haiku, source, btn) {
   }
 }
 
+// ── Contrast image generation ──
+async function generateContrastImage(haiku, source, sourceImageB64, sourceMime, preview) {
+  await document.fonts.ready;
+
+  const W = preview ? 540 : 1080;
+  const scale = W / 1080;
+  const PAD = Math.round(40 * scale);
+  const INNER_W = W - 2 * PAD;
+  const mono = "'Courier New', monospace";
+  const serif = "'IM Fell English', Georgia, serif";
+
+  const bg = '#f7f3ea', surface = '#f0ebe0', border = '#c8bfa8';
+  const dim = '#887050', mid = '#554430', text = '#2c2418';
+  const accent = '#4a6a30', green = '#3a6020';
+
+  // Load source image if available
+  let srcImg = null;
+  let srcDrawW = 0, srcDrawH = 0;
+  if (sourceImageB64 && sourceMime) {
+    srcImg = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = 'data:' + sourceMime + ';base64,' + sourceImageB64;
+    });
+    const maxH = Math.round(700 * scale);
+    const ratio = Math.min(INNER_W / srcImg.naturalWidth, maxH / srcImg.naturalHeight);
+    srcDrawW = Math.round(srcImg.naturalWidth * ratio);
+    srcDrawH = Math.round(srcImg.naturalHeight * ratio);
+  }
+
+  // Measure source text lines for text mode
+  let srcTextLines = [];
+  if (!srcImg && source) {
+    const tmpCanvas = document.createElement('canvas');
+    tmpCanvas.width = W; tmpCanvas.height = 100;
+    const tmpCtx = tmpCanvas.getContext('2d');
+    tmpCtx.font = `${Math.round(18 * scale)}px ${mono}`;
+    const maxTW = INNER_W - Math.round(30 * scale);
+    const prefix = '// ';
+    const prefixW = tmpCtx.measureText(prefix).width;
+    const words = source.split(' ');
+    let cur = '';
+    for (const word of words) {
+      const test = cur ? cur + ' ' + word : word;
+      const lw = (srcTextLines.length === 0 ? prefixW : 0) + tmpCtx.measureText(test).width;
+      if (lw > maxTW && cur) { srcTextLines.push(cur); if (srcTextLines.length === 3) { cur = ''; break; } cur = word; }
+      else cur = test;
+    }
+    if (cur && srcTextLines.length < 3) srcTextLines.push(cur);
+  }
+
+  // Calculate haiku card dimensions
+  const barH = Math.round(30 * scale);
+  const lineH = Math.round(55 * scale);
+  const haikuPadTop = Math.round(25 * scale);
+  const haikuPadBot = Math.round(20 * scale);
+  const sylH = Math.round(30 * scale);
+  const cardH = barH + haikuPadTop + 3 * lineH + Math.round(15 * scale) + sylH + haikuPadBot;
+
+  const arrowGap = Math.round(30 * scale);
+  const brandH = Math.round(60 * scale);
+
+  let srcSectionH = 0;
+  if (srcImg) {
+    srcSectionH = srcDrawH + Math.round(2 * scale);
+  } else if (srcTextLines.length > 0) {
+    srcSectionH = Math.round((srcTextLines.length * 22 + 20) * scale);
+  }
+
+  const totalH = PAD + srcSectionH + arrowGap + cardH + brandH;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = totalH;
+  const ctx = canvas.getContext('2d');
+
+  // Background
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, totalH);
+
+  let y = PAD;
+
+  // Draw source
+  if (srcImg) {
+    const imgX = PAD + (INNER_W - srcDrawW) / 2;
+    ctx.strokeStyle = border;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(imgX - 0.5, y - 0.5, srcDrawW + 1, srcDrawH + 1);
+    ctx.drawImage(srcImg, imgX, y, srcDrawW, srcDrawH);
+    y += srcDrawH;
+  } else if (srcTextLines.length > 0) {
+    const boxPad = Math.round(15 * scale);
+    const boxH = srcSectionH;
+    ctx.fillStyle = surface;
+    ctx.fillRect(PAD, y, INNER_W, boxH);
+    ctx.strokeStyle = border;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(PAD + 0.5, y + 0.5, INNER_W - 1, boxH - 1);
+    ctx.font = `${Math.round(18 * scale)}px ${mono}`;
+    ctx.fillStyle = dim;
+    ctx.textBaseline = 'top';
+    srcTextLines.forEach((line, i) => {
+      ctx.fillText(i === 0 ? '// ' + line : line, PAD + boxPad, y + boxPad + i * Math.round(22 * scale));
+    });
+    y += boxH;
+  }
+
+  // Arrow
+  y += arrowGap / 2;
+  ctx.font = `${Math.round(20 * scale)}px ${mono}`;
+  ctx.fillStyle = border;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+  ctx.fillText('↓', W / 2, y);
+  ctx.textAlign = 'left';
+  y += arrowGap / 2;
+
+  // Haiku card
+  const cardX = PAD;
+  const cardW = INNER_W;
+  ctx.fillStyle = surface;
+  ctx.fillRect(cardX, y, cardW, cardH);
+  ctx.strokeStyle = border;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(cardX + 0.5, y + 0.5, cardW - 1, cardH - 1);
+
+  // Top bar
+  ctx.fillStyle = 'rgba(0,0,0,0.02)';
+  ctx.fillRect(cardX + 1, y + 1, cardW - 2, barH - 1);
+  ctx.strokeStyle = border;
+  ctx.beginPath();
+  ctx.moveTo(cardX, y + barH);
+  ctx.lineTo(cardX + cardW, y + barH);
+  ctx.stroke();
+  ctx.font = `${Math.round(12 * scale)}px ${mono}`;
+  ctx.fillStyle = dim;
+  ctx.textBaseline = 'middle';
+  ctx.fillText('output.haiku', cardX + Math.round(10 * scale), y + barH / 2);
+  ctx.fillStyle = green;
+  const checkText = '✓ generated';
+  const checkW = ctx.measureText(checkText).width;
+  ctx.fillText(checkText, cardX + cardW - checkW - Math.round(10 * scale), y + barH / 2);
+
+  y += barH + haikuPadTop;
+
+  // Haiku lines
+  const LEFT = cardX + Math.round(15 * scale);
+  const TEXT_LEFT = cardX + Math.round(45 * scale);
+  [[haiku.line1, 5], [haiku.line2, 7], [haiku.line3, 5]].forEach(([line, syl]) => {
+    ctx.font = `${Math.round(18 * scale)}px ${mono}`;
+    ctx.fillStyle = dim;
+    ctx.textBaseline = 'top';
+    ctx.fillText(String(syl), LEFT, y + Math.round(12 * scale));
+    ctx.font = `italic ${Math.round(40 * scale)}px ${serif}`;
+    ctx.fillStyle = text;
+    ctx.fillText(line, TEXT_LEFT, y);
+    y += lineH;
+  });
+
+  // Separator
+  y += Math.round(5 * scale);
+  ctx.strokeStyle = border;
+  ctx.beginPath();
+  ctx.moveTo(cardX + Math.round(10 * scale), y);
+  ctx.lineTo(cardX + cardW - Math.round(10 * scale), y);
+  ctx.stroke();
+  y += Math.round(10 * scale);
+
+  // Syllable bars
+  ctx.font = `${Math.round(14 * scale)}px ${mono}`;
+  ctx.textBaseline = 'top';
+  let barX = LEFT;
+  [[haiku.s1 ?? 5, 5], [haiku.s2 ?? 7, 7], [haiku.s3 ?? 5, 5]].forEach(([count, total], i) => {
+    const filled = Math.min(count ?? total, total);
+    const filledStr = '█'.repeat(filled);
+    const unfilledStr = '░'.repeat(total - filled);
+    ctx.fillStyle = accent;
+    ctx.fillText(filledStr, barX, y);
+    ctx.fillStyle = border;
+    ctx.fillText(unfilledStr, barX + ctx.measureText(filledStr).width, y);
+    if (i < 2) barX += ctx.measureText(filledStr + unfilledStr).width + Math.round(20 * scale);
+  });
+
+  // Branding
+  const brandY = totalH - brandH / 2;
+  ctx.font = `${Math.round(16 * scale)}px ${mono}`;
+  ctx.fillStyle = dim;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+  ctx.fillText('frogpond.lol', W / 2, brandY);
+  ctx.textAlign = 'left';
+
+  return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+}
+
+// ── Carousel slides ──
+async function generateCarouselSlides(haiku, source, sourceImageB64, sourceMime) {
+  await document.fonts.ready;
+
+  const W = 1080, H = 1080;
+  const mono = "'Courier New', monospace";
+  const bg = '#f7f3ea', border = '#c8bfa8', dim = '#887050', surface = '#f0ebe0';
+
+  // Slide 1: Source
+  const c1 = document.createElement('canvas');
+  c1.width = W; c1.height = H;
+  const ctx1 = c1.getContext('2d');
+  ctx1.fillStyle = bg;
+  ctx1.fillRect(0, 0, W, H);
+  ctx1.strokeStyle = border;
+  ctx1.lineWidth = 1;
+  ctx1.strokeRect(0.5, 0.5, W - 1, H - 1);
+
+  if (sourceImageB64 && sourceMime) {
+    const img = await new Promise((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = reject;
+      i.src = 'data:' + sourceMime + ';base64,' + sourceImageB64;
+    });
+    const pad = 60;
+    const maxW = W - 2 * pad, maxH = H - 2 * pad;
+    const ratio = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight);
+    const dw = Math.round(img.naturalWidth * ratio);
+    const dh = Math.round(img.naturalHeight * ratio);
+    const dx = (W - dw) / 2, dy = (H - dh) / 2;
+    ctx1.strokeStyle = border;
+    ctx1.strokeRect(dx - 0.5, dy - 0.5, dw + 1, dh + 1);
+    ctx1.drawImage(img, dx, dy, dw, dh);
+  } else if (source) {
+    // Text mode: render source text centered
+    ctx1.font = `20px ${mono}`;
+    ctx1.fillStyle = dim;
+    ctx1.textBaseline = 'middle';
+    ctx1.textAlign = 'center';
+    const words = source.split(' ');
+    const lines = [];
+    let cur = '';
+    const maxTW = W - 200;
+    for (const word of words) {
+      const test = cur ? cur + ' ' + word : word;
+      if (ctx1.measureText(test).width > maxTW && cur) { lines.push(cur); if (lines.length >= 5) { cur = ''; break; } cur = word; }
+      else cur = test;
+    }
+    if (cur && lines.length < 5) lines.push(cur);
+    const lineH = 32;
+    const startY = H / 2 - (lines.length * lineH) / 2;
+    ctx1.fillStyle = surface;
+    const boxPad = 30;
+    const boxH = lines.length * lineH + 2 * boxPad;
+    ctx1.fillRect(80, startY - boxPad, W - 160, boxH);
+    ctx1.strokeStyle = border;
+    ctx1.strokeRect(80.5, startY - boxPad + 0.5, W - 161, boxH - 1);
+    ctx1.fillStyle = dim;
+    lines.forEach((line, i) => {
+      ctx1.fillText(i === 0 ? '// ' + line : line, W / 2, startY + i * lineH + lineH / 2);
+    });
+    ctx1.textAlign = 'left';
+  }
+
+  const slide1 = await new Promise(resolve => c1.toBlob(resolve, 'image/png'));
+
+  // Slide 2: Haiku (reuse existing function)
+  const slide2 = await generateHaikuImage(haiku, source);
+
+  return [slide1, slide2];
+}
+
+// ── Export handler ──
+async function handleExport(format, resultData, action) {
+  let blob;
+  let filename = 'haiku-frogpond.png';
+
+  if (format === 'card') {
+    blob = await generateHaikuImage(resultData.haiku, resultData.source);
+  } else if (format === 'contrast') {
+    blob = await generateContrastImage(
+      resultData.haiku, resultData.source,
+      resultData.sourceImageB64, resultData.sourceMime, false
+    );
+    filename = 'haiku-contrast-frogpond.png';
+  } else if (format === 'carousel') {
+    const slides = await generateCarouselSlides(
+      resultData.haiku, resultData.source,
+      resultData.sourceImageB64, resultData.sourceMime
+    );
+
+    if (action === 'share' && navigator.share && navigator.canShare) {
+      const files = [
+        new File([slides[0]], 'source-frogpond.png', { type: 'image/png' }),
+        new File([slides[1]], 'haiku-frogpond.png', { type: 'image/png' }),
+      ];
+      if (navigator.canShare({ files })) {
+        await navigator.share({ files, title: 'haiku — frogpond.lol' });
+        return;
+      }
+    }
+    // Download both
+    for (let i = 0; i < slides.length; i++) {
+      const url = URL.createObjectURL(slides[i]);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = i === 0 ? 'source-frogpond.png' : 'haiku-frogpond.png';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+    return;
+  }
+
+  if (action === 'share' && navigator.share && navigator.canShare) {
+    const file = new File([blob], filename, { type: 'image/png' });
+    if (navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'haiku — frogpond.lol' });
+      return;
+    }
+  }
+  // Fallback: download
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ── Share URL — lean payload, no source or syl counts to keep URLs short ──
 function makeShareUrl(haiku, source, t) {
   const payload = {
@@ -629,12 +955,14 @@ function renderResults(results) {
 }
 
 function makeCard(r, idx) {
-  const { source, fullSource, haiku, tone: t } = r;
+  const { source, fullSource, haiku, tone: t, sourceImageB64: srcB64, sourceMime: srcMime } = r;
   const card = document.createElement('div');
   card.className = 'haiku-card';
   card.style.transitionDelay = `${idx * 0.08}s`;
 
   const fullText = `${haiku.line1}\n${haiku.line2}\n${haiku.line3}`;
+  const hasImage = !!srcB64;
+  const defaultFormat = hasImage ? 'contrast' : 'card';
 
   const sylBar = (count, total) => {
     const f = Math.min(count ?? total, total);
@@ -658,12 +986,82 @@ function makeCard(r, idx) {
         </div>
         <div class="card-actions">
           <button class="action-btn" data-copy="${esc(fullText)}">copy haiku</button>
-          <button class="action-btn" data-save-image>share</button>
+          <button class="action-btn" data-export>export ↓</button>
           <button class="action-btn" data-speak="${esc(fullText)}" data-speak-source="${esc(fullSource || source)}">read aloud</button>
         </div>
       </div>
     </div>
+    <div class="share-panel hidden">
+      <div class="share-formats">
+        <button class="share-fmt-btn${defaultFormat === 'contrast' ? ' active' : ''}" data-format="contrast">contrast</button>
+        <button class="share-fmt-btn${defaultFormat === 'card' ? ' active' : ''}" data-format="card">haiku only</button>
+        <button class="share-fmt-btn" data-format="carousel">carousel</button>
+      </div>
+      <div class="share-preview"></div>
+      <div class="share-actions-row">
+        <button class="share-download-btn">download</button>
+        <button class="share-native-btn">share</button>
+      </div>
+    </div>
   `;
+
+  const resultData = { haiku, source: fullSource || source, sourceImageB64: srcB64, sourceMime: srcMime };
+  const panel = card.querySelector('.share-panel');
+  let currentFormat = defaultFormat;
+
+  // Generate preview at half resolution
+  async function updatePreview() {
+    const previewEl = panel.querySelector('.share-preview');
+    previewEl.innerHTML = '<span style="color:var(--dim);font-size:12px">generating...</span>';
+    try {
+      let blob;
+      if (currentFormat === 'card') {
+        blob = await generateHaikuImage(haiku, resultData.source);
+      } else if (currentFormat === 'contrast') {
+        blob = await generateContrastImage(haiku, resultData.source, srcB64, srcMime, true);
+      } else if (currentFormat === 'carousel') {
+        blob = await generateContrastImage(haiku, resultData.source, srcB64, srcMime, true);
+      }
+      const url = URL.createObjectURL(blob);
+      previewEl.innerHTML = `<img src="${url}" alt="preview" />`;
+    } catch {
+      previewEl.innerHTML = '<span style="color:var(--red);font-size:12px">preview failed</span>';
+    }
+  }
+
+  // Format buttons
+  panel.querySelectorAll('.share-fmt-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      panel.querySelectorAll('.share-fmt-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentFormat = btn.dataset.format;
+      updatePreview();
+    });
+  });
+
+  // Download button
+  panel.querySelector('.share-download-btn').addEventListener('click', async function() {
+    const btn = this;
+    btn.textContent = '// generating...'; btn.classList.add('ok');
+    try {
+      if (window.posthog) posthog.capture('haiku_shared', { tone: t, method: 'download', format: currentFormat });
+      await handleExport(currentFormat, resultData, 'download');
+      btn.textContent = '// done!';
+      setTimeout(() => { btn.textContent = 'download'; btn.classList.remove('ok'); }, 1800);
+    } catch { btn.textContent = 'download'; btn.classList.remove('ok'); }
+  });
+
+  // Share button
+  panel.querySelector('.share-native-btn').addEventListener('click', async function() {
+    const btn = this;
+    btn.textContent = '// sharing...'; btn.classList.add('ok');
+    try {
+      if (window.posthog) posthog.capture('haiku_shared', { tone: t, method: 'native_share', format: currentFormat });
+      await handleExport(currentFormat, resultData, 'share');
+      btn.textContent = '// shared!';
+      setTimeout(() => { btn.textContent = 'share'; btn.classList.remove('ok'); }, 1800);
+    } catch { btn.textContent = 'share'; btn.classList.remove('ok'); }
+  });
 
   card.querySelectorAll('.action-btn').forEach(btn => {
     btn.addEventListener('click', function() {
@@ -672,18 +1070,13 @@ function makeCard(r, idx) {
         navigator.clipboard.writeText(this.dataset.copy + '\n\n-- frogpond.lol').then(() => {
           this.textContent = '// copied!'; this.classList.add('ok');
           setTimeout(() => { this.textContent = orig; this.classList.remove('ok'); }, 1800);
-          if (window.posthog) {
-            posthog.capture('haiku_copied');
-          }
+          if (window.posthog) posthog.capture('haiku_copied');
         });
-      } else if ('saveImage' in this.dataset) {
-        if (window.posthog) {
-          posthog.capture('haiku_shared', {
-            tone: t,
-            method: navigator.share ? 'native_share' : 'download',
-          });
-        }
-        saveHaikuImage(haiku, fullSource || source, this);
+      } else if ('export' in this.dataset) {
+        const isOpen = !panel.classList.contains('hidden');
+        panel.classList.toggle('hidden');
+        this.textContent = isOpen ? 'export ↓' : 'export ↑';
+        if (!isOpen) updatePreview();
       } else if (this.dataset.speak) {
         speak(this.dataset.speak, this.dataset.speakSource, this);
       }
