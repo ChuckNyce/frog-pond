@@ -48,6 +48,7 @@
   <div class="tabs">
     <button class="tab active" id="tab-text">&gt; paste_text</button>
     <button class="tab" id="tab-image">  screenshot</button>
+    <button class="tab" id="tab-custom">  custom</button>
   </div>
 
   <!-- Text panel -->
@@ -80,6 +81,61 @@
       <div class="preview-wrap hidden" id="preview-wrap">
         <img id="preview-img" alt="screenshot" />
         <button class="preview-clear" id="clear-img">[x] clear</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Custom panel -->
+  <div id="custom-panel" class="hidden">
+    <!-- Haiku input -->
+    <div class="file-box">
+      <div class="file-bar">
+        <span>custom.haiku</span>
+        <span id="custom-status">3 lines</span>
+      </div>
+      <div class="custom-lines">
+        <div class="custom-line-row">
+          <span class="custom-line-num">5</span>
+          <input type="text" class="custom-line-input" id="custom-line1" placeholder="line one (5 syllables)" maxlength="80" />
+          <span class="syl-count" id="syl-count-1"></span>
+        </div>
+        <div class="custom-line-row">
+          <span class="custom-line-num">7</span>
+          <input type="text" class="custom-line-input" id="custom-line2" placeholder="line two (7 syllables)" maxlength="80" />
+          <span class="syl-count" id="syl-count-2"></span>
+        </div>
+        <div class="custom-line-row">
+          <span class="custom-line-num">5</span>
+          <input type="text" class="custom-line-input" id="custom-line3" placeholder="line three (5 syllables)" maxlength="80" />
+          <span class="syl-count" id="syl-count-3"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Optional source text -->
+    <div class="file-box">
+      <div class="file-bar">
+        <span>source.txt</span>
+        <span class="dim">optional</span>
+      </div>
+      <textarea id="custom-source" rows="2" placeholder="  optional: paste the original post text..."></textarea>
+    </div>
+
+    <!-- Optional source image -->
+    <div class="file-box">
+      <div class="file-bar">
+        <span>source.png</span>
+        <span id="custom-img-status">no file</span>
+      </div>
+      <div class="dropzone" id="custom-dropzone">
+        <input type="file" id="custom-file-input" accept="image/*" />
+        <div class="dropzone-icon">[ img ]</div>
+        <p>optional: add source screenshot</p>
+        <small>for contrast image export</small>
+      </div>
+      <div class="preview-wrap hidden" id="custom-preview-wrap">
+        <img id="custom-preview-img" alt="source" />
+        <button class="preview-clear" id="custom-clear-img">[x] clear</button>
       </div>
     </div>
   </div>

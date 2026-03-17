@@ -1,8 +1,75 @@
+// ── IndexedDB for source images ──
+const DB_NAME = 'frogpond';
+const DB_VERSION = 1;
+const STORE_NAME = 'images';
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function storeImage(id, base64, mime) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).put({ id, base64, mime });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function getImage(id) {
+  if (!id) return null;
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const req = tx.objectStore(STORE_NAME).get(id);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function deleteImage(id) {
+  if (!id) return;
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function clearAllImages() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).clear();
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+function generateImageId() {
+  return 'img_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+}
+
 // ── State ──
 let mode = 'text';
 let tone = 'sincere';
 let imageB64 = null;
 let imageMime = null;
+let customImageB64 = null;
+let customImageMime = null;
 const MAX_HISTORY = 30;
 let hasConverted = false;
 
@@ -120,8 +187,10 @@ document.getElementById('theme-toggle').addEventListener('click', () => {
 const $ = id => document.getElementById(id);
 const tabText        = $('tab-text');
 const tabImage       = $('tab-image');
+const tabCustom      = $('tab-custom');
 const textPanel      = $('text-panel');
 const imagePanel     = $('image-panel');
+const customPanel    = $('custom-panel');
 const tweetArea      = $('tweet-area');
 const charCount      = $('char-count');
 const dropzone       = $('dropzone');
@@ -151,15 +220,19 @@ function init() {
 // ── Tabs ──
 tabText.addEventListener('click',  () => setMode('text'));
 tabImage.addEventListener('click', () => setMode('image'));
+tabCustom.addEventListener('click', () => setMode('custom'));
 
 function setMode(m) {
   mode = m;
   tabText.classList.toggle('active',  m === 'text');
   tabImage.classList.toggle('active', m === 'image');
-  tabText.textContent  = m === 'text'  ? '> paste_text' : '  paste_text';
-  tabImage.textContent = m === 'image' ? '> screenshot'  : '  screenshot';
+  tabCustom.classList.toggle('active', m === 'custom');
+  tabText.textContent  = m === 'text'   ? '> paste_text' : '  paste_text';
+  tabImage.textContent = m === 'image'  ? '> screenshot'  : '  screenshot';
+  tabCustom.textContent = m === 'custom' ? '> custom'      : '  custom';
   textPanel.classList.toggle('hidden',  m !== 'text');
   imagePanel.classList.toggle('hidden', m !== 'image');
+  customPanel.classList.toggle('hidden', m !== 'custom');
   resultsEl.innerHTML = '';
   errorEl.classList.add('hidden');
   updateConvertBtn();
@@ -230,8 +303,16 @@ function handleFile(file) {
 function updateConvertBtn() {
   if (mode === 'text') {
     convertBtn.disabled = !tweetArea.value.trim();
-  } else {
+    convertBtn.textContent = 'convert → haiku';
+  } else if (mode === 'image') {
     convertBtn.disabled = !imageB64;
+    convertBtn.textContent = 'convert → haiku';
+  } else if (mode === 'custom') {
+    const l1 = $('custom-line1').value.trim();
+    const l2 = $('custom-line2').value.trim();
+    const l3 = $('custom-line3').value.trim();
+    convertBtn.disabled = !(l1 && l2 && l3);
+    convertBtn.textContent = 'export → haiku';
   }
 }
 
@@ -248,7 +329,24 @@ async function convert() {
     let results;
     const capturedImageB64 = imageB64;
     const capturedImageMime = imageMime;
-    if (mode === 'text') {
+    if (mode === 'custom') {
+      const l1 = $('custom-line1').value.trim();
+      const l2 = $('custom-line2').value.trim();
+      const l3 = $('custom-line3').value.trim();
+      const source = $('custom-source').value.trim();
+      const haiku = { line1: l1, line2: l2, line3: l3, s1: 5, s2: 7, s3: 5 };
+      results = [{
+        source: source || '',
+        fullSource: source || '',
+        haiku,
+        tone: tone,
+        sourceImageB64: customImageB64 || null,
+        sourceMime: customImageMime || null,
+      }];
+      if (window.posthog) {
+        posthog.capture('haiku_custom', { has_source_image: !!customImageB64, has_source_text: !!source });
+      }
+    } else if (mode === 'text') {
       const text = tweetArea.value.trim();
       const haiku = await convertText(text);
       results = [{ source: text.slice(0, 80), fullSource: text, haiku, tone, sourceImageB64: null, sourceMime: null }];
@@ -256,7 +354,7 @@ async function convert() {
       results = await parseAndConvertImage(imageB64, imageMime);
       results.forEach(r => { r.sourceImageB64 = capturedImageB64; r.sourceMime = capturedImageMime; });
     }
-    saveToHistory(results);
+    await saveToHistory(results);
     if (window.posthog) {
       posthog.capture('haiku_converted', {
         mode: mode,
@@ -894,13 +992,42 @@ function getHistory() {
   catch { return []; }
 }
 
-function saveToHistory(results) {
+async function saveToHistory(results) {
   const hist = getHistory();
   const ts = Date.now();
-  results.forEach(r => {
-    if (!r.haiku) return;
-    hist.unshift({ haiku: r.haiku, source: r.source, tone: r.tone, ts });
-  });
+
+  for (const r of results) {
+    if (!r.haiku) continue;
+
+    let imageId = null;
+    if (r.sourceImageB64) {
+      imageId = generateImageId();
+      try {
+        await storeImage(imageId, r.sourceImageB64, r.sourceMime);
+      } catch (e) {
+        console.warn('failed to store image in IndexedDB:', e);
+        imageId = null;
+      }
+    }
+
+    hist.unshift({
+      haiku: r.haiku,
+      source: r.source,
+      fullSource: r.fullSource || r.source,
+      tone: r.tone,
+      ts,
+      imageId,
+    });
+  }
+
+  // Clean up images from entries that fell off the history
+  const removed = hist.slice(MAX_HISTORY);
+  for (const old of removed) {
+    if (old.imageId) {
+      try { await deleteImage(old.imageId); } catch (e) { /* ignore */ }
+    }
+  }
+
   localStorage.setItem('fp_history', JSON.stringify(hist.slice(0, MAX_HISTORY)));
   renderHistory();
 }
@@ -910,6 +1037,7 @@ function renderHistory() {
   if (hist.length === 0) { historySection.classList.add('hidden'); return; }
   historySection.classList.remove('hidden');
   historyList.innerHTML = '';
+
   hist.slice(0, 10).forEach(item => {
     const el = document.createElement('div');
     el.className = 'history-item';
@@ -917,13 +1045,51 @@ function renderHistory() {
       <div class="history-lines">${esc(item.haiku.line1)} / ${esc(item.haiku.line2)} / ${esc(item.haiku.line3)}</div>
       <span class="history-date">${timeAgo(item.ts)}</span>
     `;
-    el.addEventListener('click', () => window.open(makeShareUrl(item.haiku, item.source, item.tone), '_blank'));
+
+    el.addEventListener('click', async () => {
+      // Load source image from IndexedDB if available
+      let sourceImageB64 = null;
+      let sourceMime = null;
+      if (item.imageId) {
+        try {
+          const imgData = await getImage(item.imageId);
+          if (imgData) {
+            sourceImageB64 = imgData.base64;
+            sourceMime = imgData.mime;
+          }
+        } catch (e) {
+          console.warn('failed to load image from IndexedDB:', e);
+        }
+      }
+
+      // Render as a result card with export panel
+      resultsEl.innerHTML = '';
+      document.querySelector('.regen-btn')?.remove();
+
+      const result = {
+        source: item.source,
+        fullSource: item.fullSource || item.source,
+        haiku: { ...item.haiku },
+        tone: item.tone,
+        sourceImageB64,
+        sourceMime,
+      };
+
+      const card = makeCard(result, 0);
+      resultsEl.appendChild(card);
+      requestAnimationFrame(() => requestAnimationFrame(() => card.classList.add('visible')));
+
+      // Scroll to results
+      resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+
     historyList.appendChild(el);
   });
 }
 
-historyClear.addEventListener('click', () => {
+historyClear.addEventListener('click', async () => {
   localStorage.removeItem('fp_history');
+  try { await clearAllImages(); } catch (e) { /* ignore */ }
   renderHistory();
 });
 
@@ -977,7 +1143,7 @@ function makeCard(r, idx) {
       ].map(([line, n]) => `
         <div class="haiku-line-row">
           <span class="haiku-line-num">${n}</span>
-          <span class="haiku-line-text">${esc(line)}</span>
+          <span class="haiku-line-text" contenteditable="true" spellcheck="false">${esc(line)}</span>
         </div>
       `).join('')}
       <div class="haiku-footer">
@@ -1063,6 +1229,21 @@ function makeCard(r, idx) {
     } catch { btn.textContent = 'share'; btn.classList.remove('ok'); }
   });
 
+  // Editable haiku lines — sync back to result data
+  const lineSpans = card.querySelectorAll('.haiku-line-text');
+  lineSpans[0].addEventListener('input', () => { r.haiku.line1 = lineSpans[0].textContent.trim(); });
+  lineSpans[1].addEventListener('input', () => { r.haiku.line2 = lineSpans[1].textContent.trim(); });
+  lineSpans[2].addEventListener('input', () => { r.haiku.line3 = lineSpans[2].textContent.trim(); });
+
+  // Paste handler — plain text only
+  lineSpans.forEach(span => {
+    span.addEventListener('paste', e => {
+      e.preventDefault();
+      const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+      document.execCommand('insertText', false, text);
+    });
+  });
+
   card.querySelectorAll('.action-btn').forEach(btn => {
     btn.addEventListener('click', function() {
       const orig = this.textContent;
@@ -1095,6 +1276,91 @@ function setLoading(on) {
   convertBtn.disabled = on;
   if (!on) updateConvertBtn();
 }
+
+// ── Syllable counter (soft indicator) ──
+function countSyllables(text) {
+  if (!text || !text.trim()) return 0;
+  const words = text.trim().toLowerCase().split(/\s+/).filter(w => w.length > 0);
+  let total = 0;
+  for (const w of words) {
+    const clean = w.replace(/[^a-z]/g, '');
+    if (!clean) continue;
+    let count = (clean.match(/[aeiouy]+/g) || []).length;
+    if (clean.endsWith('e') && count > 1 && !clean.endsWith('le')) count--;
+    if (count < 1) count = 1;
+    total += count;
+  }
+  return total;
+}
+
+function updateSylCount(inputEl, countEl, target) {
+  const text = inputEl.value.trim();
+  if (!text) {
+    countEl.textContent = '';
+    countEl.className = 'syl-count empty';
+    return;
+  }
+  const count = countSyllables(text);
+  if (count === target) {
+    countEl.textContent = count + '/' + target + ' ✓';
+    countEl.className = 'syl-count ok';
+  } else {
+    countEl.textContent = count + '/' + target + ' ⚠';
+    countEl.className = 'syl-count warn';
+  }
+}
+
+// ── Custom mode wiring ──
+const customDropzone = $('custom-dropzone');
+const customFileInput = $('custom-file-input');
+const customPreviewWrap = $('custom-preview-wrap');
+const customPreviewImg = $('custom-preview-img');
+const customClearImg = $('custom-clear-img');
+const customImgStatus = $('custom-img-status');
+
+customDropzone.addEventListener('dragover', e => { e.preventDefault(); customDropzone.classList.add('drag-over'); });
+customDropzone.addEventListener('dragleave', () => customDropzone.classList.remove('drag-over'));
+customDropzone.addEventListener('drop', e => { e.preventDefault(); customDropzone.classList.remove('drag-over'); handleCustomFile(e.dataTransfer.files[0]); });
+customFileInput.addEventListener('change', () => handleCustomFile(customFileInput.files[0]));
+
+customClearImg.addEventListener('click', () => {
+  customImageB64 = null; customImageMime = null;
+  customPreviewWrap.classList.add('hidden');
+  customDropzone.classList.remove('hidden');
+  customFileInput.value = '';
+  customImgStatus.textContent = 'no file';
+  customImgStatus.className = '';
+});
+
+function handleCustomFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  customImageMime = file.type;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const url = e.target.result;
+    customImageB64 = url.split(',')[1];
+    customPreviewImg.src = url;
+    customPreviewWrap.classList.remove('hidden');
+    customDropzone.classList.add('hidden');
+    customImgStatus.textContent = file.name.slice(0, 20) + (file.name.length > 20 ? '…' : '');
+    customImgStatus.className = 'status-ok';
+  };
+  reader.readAsDataURL(file);
+}
+
+// Custom line input listeners
+$('custom-line1').addEventListener('input', () => {
+  updateSylCount($('custom-line1'), $('syl-count-1'), 5);
+  updateConvertBtn();
+});
+$('custom-line2').addEventListener('input', () => {
+  updateSylCount($('custom-line2'), $('syl-count-2'), 7);
+  updateConvertBtn();
+});
+$('custom-line3').addEventListener('input', () => {
+  updateSylCount($('custom-line3'), $('syl-count-3'), 5);
+  updateConvertBtn();
+});
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(() => {});
