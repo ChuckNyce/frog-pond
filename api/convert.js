@@ -57,7 +57,7 @@ function checkRateLimit(ip) {
 }
 
 const ALLOWED_BODY_FIELDS = new Set(['model', 'max_tokens', 'system', 'messages']);
-const MAX_SYSTEM_LENGTH = 1000;
+const MAX_SYSTEM_LENGTH = 2500;
 const MAX_TEXT_LENGTH = 5000;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
 
