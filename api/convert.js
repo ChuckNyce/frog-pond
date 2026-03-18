@@ -77,7 +77,7 @@ function validateRequest(body) {
   if (!body.messages || !Array.isArray(body.messages)) {
     return 'messages must be an array.';
   }
-  if (body.messages.length < 1 || body.messages.length > 2) {
+  if (body.messages.length < 1 || body.messages.length > 4) {
     return 'messages must contain 1-2 messages.';
   }
 
