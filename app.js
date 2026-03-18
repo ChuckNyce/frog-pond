@@ -327,6 +327,7 @@ async function convert() {
 
   try {
     let results;
+    let imageType = null;
     const capturedImageB64 = imageB64;
     const capturedImageMime = imageMime;
     if (mode === 'custom') {
@@ -351,8 +352,25 @@ async function convert() {
       const haiku = await convertText(text);
       results = [{ source: text.slice(0, 80), fullSource: text, haiku, tone, sourceImageB64: null, sourceMime: null }];
     } else {
-      results = await parseAndConvertImage(imageB64, imageMime);
-      results.forEach(r => { r.sourceImageB64 = capturedImageB64; r.sourceMime = capturedImageMime; });
+      imageType = await classifyImage(capturedImageB64, capturedImageMime);
+
+      if (imageType === 'social') {
+        results = await parseAndConvertImage(capturedImageB64, capturedImageMime);
+        results.forEach(r => {
+          r.sourceImageB64 = capturedImageB64;
+          r.sourceMime = capturedImageMime;
+        });
+      } else {
+        const haiku = await convertImage(capturedImageB64, capturedImageMime);
+        results = [{
+          source: 'image',
+          fullSource: 'image',
+          haiku,
+          tone,
+          sourceImageB64: capturedImageB64,
+          sourceMime: capturedImageMime,
+        }];
+      }
     }
     await saveToHistory(results);
     if (window.posthog) {
@@ -360,7 +378,7 @@ async function convert() {
         mode: mode,
         tone: tone,
         haiku_count: results.length,
-        source: mode === 'text' ? 'paste' : 'screenshot',
+        image_type: imageType || null,
       });
     }
     renderResults(results);
@@ -413,6 +431,14 @@ function parseJSON(raw) {
 async function convertText(text) {
   const raw = await callClaude({
     system: `You are a haiku master. Convert the essence of this text into a perfect haiku (5-7-5 syllables).
+
+VOCABULARY GUIDELINES:
+- Avoid overusing these common poetic defaults: weep, weeping, cosmic, eternal, sacred, ancient, whisper, whispers, void, soul, divine, mortal, fate, silent, echo, tears, abyss, fleeting, destiny, beneath, descend, gentle, wisdom — they're not banned, but vary your word choices and reach for fresher alternatives when possible
+- Prefer concrete, specific, surprising language over generic poetic filler
+- Everyday words used in unexpected ways are more interesting than "poetic" vocabulary
+- The best haiku feel like a joke, a punch line, or a sharp observation — not a greeting card
+- Surprise the reader with the third line — subvert expectations
+
 Respond ONLY with raw JSON — no markdown, no backticks, nothing else.
 Format: {"line1":"text","line2":"text","line3":"text","s1":5,"s2":7,"s3":5}
 Count syllables very carefully. All lines lowercase. ${TONES[tone]}`,
@@ -448,6 +474,14 @@ Rules:
 
   const batchRaw = await callClaude({
     system: `You are a haiku master. Convert each post into a perfect haiku (5-7-5 syllables).
+
+VOCABULARY GUIDELINES:
+- Avoid overusing these common poetic defaults: weep, weeping, cosmic, eternal, sacred, ancient, whisper, whispers, void, soul, divine, mortal, fate, silent, echo, tears, abyss, fleeting, destiny, beneath, descend, gentle, wisdom — they're not banned, but vary your word choices and reach for fresher alternatives when possible
+- Prefer concrete, specific, surprising language over generic poetic filler
+- Everyday words used in unexpected ways are more interesting than "poetic" vocabulary
+- The best haiku feel like a joke, a punch line, or a sharp observation — not a greeting card
+- Surprise the reader with the third line — subvert expectations
+
 Respond ONLY with a raw JSON array — no markdown, no backticks.
 Format: [{"line1":"text","line2":"text","line3":"text","s1":5,"s2":7,"s3":5},...]
 Same order as input. Count syllables carefully. All lines lowercase. ${TONES[tone]}`,
@@ -463,6 +497,50 @@ Same order as input. Count syllables carefully. All lines lowercase. ${TONES[ton
     haiku: haikus[i] || null,
     tone,
   })).filter(r => r.haiku);
+}
+
+// ── Image classification ──
+async function classifyImage(b64, mime) {
+  const raw = await callClaude({
+    system: `Classify this image. Respond with ONLY one word: "social" if this is a screenshot of social media posts (tweets, Instagram, Reddit, Bluesky, Facebook, etc. with visible usernames, timestamps, like counts, or platform UI), or "general" for anything else (photos, memes, game screenshots, artwork, news headlines, etc.).
+Respond with ONLY the single word "social" or "general". Nothing else.`,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: mime, data: b64 } },
+        { type: 'text', text: 'Classify this image.' }
+      ]
+    }],
+  });
+  return raw.trim().toLowerCase().includes('social') ? 'social' : 'general';
+}
+
+// ── General image → haiku ──
+async function convertImage(b64, mime) {
+  const raw = await callClaude({
+    system: `You are a haiku master. Look at this image and write a perfect haiku (5-7-5 syllables) about what you see, feel, or find funny about it.
+
+Don't describe the image literally — capture the feeling, the absurdity, the irony, or the beauty of the moment. React to it like a human would.
+
+VOCABULARY GUIDELINES:
+- Avoid overusing these common poetic defaults: weep, weeping, cosmic, eternal, sacred, ancient, whisper, whispers, void, soul, divine, mortal, fate, silent, echo, tears, abyss, fleeting, destiny, beneath, descend, gentle, wisdom — they're not banned, but vary your word choices and reach for fresher alternatives when possible
+- Prefer concrete, specific, surprising language over generic poetic filler
+- Everyday words used in unexpected ways are more interesting than "poetic" vocabulary
+- The best haiku feel like a joke, a punch line, or a sharp observation — not a greeting card
+- Surprise the reader with the third line — subvert expectations
+
+Respond ONLY with raw JSON — no markdown, no backticks, nothing else.
+Format: {"line1":"text","line2":"text","line3":"text","s1":5,"s2":7,"s3":5}
+Count syllables very carefully. All lines lowercase. ${TONES[tone]}`,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: mime, data: b64 } },
+        { type: 'text', text: 'Write a haiku about this image.' }
+      ]
+    }],
+  });
+  return parseJSON(raw);
 }
 
 // ── Haiku image generation ──
