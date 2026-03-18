@@ -427,8 +427,26 @@ function parseJSON(raw) {
   catch { return JSON.parse(raw.replace(/```json|```/g, '').trim()); }
 }
 
+async function parseJSONWithRetry(raw, originalMessages, jsonFormat) {
+  try {
+    return parseJSON(raw);
+  } catch {
+    const retryRaw = await callClaude({
+      system: `Your previous response was not valid JSON. Respond ONLY with raw JSON — no markdown, no backticks, no explanation, nothing else.\nFormat: ${jsonFormat}`,
+      messages: [
+        ...originalMessages,
+        { role: 'assistant', content: raw },
+        { role: 'user', content: 'That was not valid JSON. Please respond with ONLY the raw JSON object, nothing else.' }
+      ],
+    });
+    return parseJSON(retryRaw);
+  }
+}
+
 // ── Text conversion ──
 async function convertText(text) {
+  const messages = [{ role: 'user', content: `Text: "${text}"` }];
+  const jsonFormat = '{"line1":"text","line2":"text","line3":"text","s1":5,"s2":7,"s3":5}';
   const raw = await callClaude({
     system: `You are a haiku master. Convert the essence of this text into a perfect haiku (5-7-5 syllables).
 
@@ -440,19 +458,27 @@ VOCABULARY GUIDELINES:
 - Surprise the reader with the third line — subvert expectations
 
 Respond ONLY with raw JSON — no markdown, no backticks, nothing else.
-Format: {"line1":"text","line2":"text","line3":"text","s1":5,"s2":7,"s3":5}
+Format: ${jsonFormat}
 Count syllables very carefully. All lines lowercase. ${TONES[tone]}`,
-    messages: [{ role: 'user', content: `Text: "${text}"` }],
+    messages,
   });
-  return parseJSON(raw);
+  return parseJSONWithRetry(raw, messages, jsonFormat);
 }
 
 // ── Image conversion ──
 async function parseAndConvertImage(b64, mime) {
+  const extractMessages = [{
+    role: 'user',
+    content: [
+      { type: 'image', source: { type: 'base64', media_type: mime, data: b64 } },
+      { type: 'text', text: 'Extract all posts from this screenshot.' }
+    ]
+  }];
+  const extractFormat = '[{"author":"username or empty string","text":"full post text"},...]';
   const extractRaw = await callClaude({
     system: `Extract individual social media posts from a screenshot.
 Respond ONLY with a raw JSON array — no markdown, no backticks.
-Format: [{"author":"username or empty string","text":"full post text"},...]
+Format: ${extractFormat}
 Rules:
 - Capture the COMPLETE text of each post — do not truncate or summarise
 - Multi-line and multi-paragraph posts should be captured in full with newlines preserved
@@ -460,18 +486,14 @@ Rules:
 - If a post is a reply, include it as a separate item
 - Skip UI elements, timestamps, like counts — only post text and author
 - If text is unreadable, skip that post entirely`,
-    messages: [{
-      role: 'user',
-      content: [
-        { type: 'image', source: { type: 'base64', media_type: mime, data: b64 } },
-        { type: 'text', text: 'Extract all posts from this screenshot.' }
-      ]
-    }],
+    messages: extractMessages,
   });
 
-  const posts = parseJSON(extractRaw);
+  const posts = await parseJSONWithRetry(extractRaw, extractMessages, extractFormat);
   if (!Array.isArray(posts) || posts.length === 0) throw new Error('no posts found in screenshot.');
 
+  const batchMessages = [{ role: 'user', content: `Convert these:\n${JSON.stringify(posts.map(p => p.text))}` }];
+  const batchFormat = '[{"line1":"text","line2":"text","line3":"text","s1":5,"s2":7,"s3":5},...]';
   const batchRaw = await callClaude({
     system: `You are a haiku master. Convert each post into a perfect haiku (5-7-5 syllables).
 
@@ -483,12 +505,12 @@ VOCABULARY GUIDELINES:
 - Surprise the reader with the third line — subvert expectations
 
 Respond ONLY with a raw JSON array — no markdown, no backticks.
-Format: [{"line1":"text","line2":"text","line3":"text","s1":5,"s2":7,"s3":5},...]
+Format: ${batchFormat}
 Same order as input. Count syllables carefully. All lines lowercase. ${TONES[tone]}`,
-    messages: [{ role: 'user', content: `Convert these:\n${JSON.stringify(posts.map(p => p.text))}` }],
+    messages: batchMessages,
   });
 
-  const haikus = parseJSON(batchRaw);
+  const haikus = await parseJSONWithRetry(batchRaw, batchMessages, batchFormat);
   if (!Array.isArray(haikus)) throw new Error('unexpected api response.');
 
   return posts.map((p, i) => ({
@@ -512,11 +534,20 @@ Respond with ONLY the single word "social" or "general". Nothing else.`,
       ]
     }],
   });
-  return raw.trim().toLowerCase().includes('social') ? 'social' : 'general';
+  const cleaned = raw.trim().toLowerCase().replace(/[^a-z]/g, '');
+  return cleaned === 'social' ? 'social' : 'general';
 }
 
 // ── General image → haiku ──
 async function convertImage(b64, mime) {
+  const messages = [{
+    role: 'user',
+    content: [
+      { type: 'image', source: { type: 'base64', media_type: mime, data: b64 } },
+      { type: 'text', text: 'Write a haiku about this image.' }
+    ]
+  }];
+  const jsonFormat = '{"line1":"text","line2":"text","line3":"text","s1":5,"s2":7,"s3":5}';
   const raw = await callClaude({
     system: `You are a haiku master. Look at this image and write a perfect haiku (5-7-5 syllables) about what you see, feel, or find funny about it.
 
@@ -530,17 +561,11 @@ VOCABULARY GUIDELINES:
 - Surprise the reader with the third line — subvert expectations
 
 Respond ONLY with raw JSON — no markdown, no backticks, nothing else.
-Format: {"line1":"text","line2":"text","line3":"text","s1":5,"s2":7,"s3":5}
+Format: ${jsonFormat}
 Count syllables very carefully. All lines lowercase. ${TONES[tone]}`,
-    messages: [{
-      role: 'user',
-      content: [
-        { type: 'image', source: { type: 'base64', media_type: mime, data: b64 } },
-        { type: 'text', text: 'Write a haiku about this image.' }
-      ]
-    }],
+    messages,
   });
-  return parseJSON(raw);
+  return parseJSONWithRetry(raw, messages, jsonFormat);
 }
 
 // ── Haiku image generation ──
