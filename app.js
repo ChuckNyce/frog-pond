@@ -443,6 +443,22 @@ async function parseJSONWithRetry(raw, originalMessages, jsonFormat) {
   }
 }
 
+// ── Dictionary-based syllable check ──
+async function checkSyllablesServer(haiku) {
+  try {
+    const res = await fetch('/api/syllables', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lines: [haiku.line1, haiku.line2, haiku.line3] }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.results;
+  } catch {
+    return null;
+  }
+}
+
 // ── Syllable verification ──
 async function verifyAndFixHaiku(haiku) {
   const verifyMessages = [{
@@ -472,9 +488,10 @@ All lines must be lowercase.`,
     messages: verifyMessages,
   });
 
+  let verified;
   try {
     const result = await parseJSONWithRetry(raw, verifyMessages, jsonFormat);
-    return {
+    verified = {
       line1: result.line1 || haiku.line1,
       line2: result.line2 || haiku.line2,
       line3: result.line3 || haiku.line3,
@@ -484,8 +501,50 @@ All lines must be lowercase.`,
     };
   } catch {
     console.warn('haiku verification failed, using original');
-    return haiku;
+    verified = haiku;
   }
+
+  // Dictionary-based syllable check
+  const sylCheck = await checkSyllablesServer(verified);
+  if (sylCheck) {
+    verified.s1 = sylCheck[0].total;
+    verified.s2 = sylCheck[1].total;
+    verified.s3 = sylCheck[2].total;
+
+    // Auto-rewrite if any line has wrong count
+    const targets = [5, 7, 5];
+    const wrong = sylCheck.map((s, i) => s.total !== targets[i] ? i : -1).filter(i => i !== -1);
+
+    if (wrong.length > 0) {
+      const fixPrompt = wrong.map(i => {
+        const lineKey = ['line1', 'line2', 'line3'][i];
+        return `Line ${i + 1} "${verified[lineKey]}" has ${sylCheck[i].total} syllables (needs ${targets[i]}). Rewrite it to exactly ${targets[i]} syllables while keeping the same meaning.`;
+      }).join('\n');
+
+      try {
+        const fixRaw = await callClaude({
+          system: `Fix the syllable counts in these haiku lines. Each word's syllable count has been verified by dictionary lookup — trust these counts. Rewrite ONLY the specified lines. Keep the tone and meaning. Respond ONLY with raw JSON: {"line1":"...","line2":"...","line3":"..."}. All lowercase.`,
+          messages: [{ role: 'user', content: `Original haiku:\nLine 1: "${verified.line1}"\nLine 2: "${verified.line2}"\nLine 3: "${verified.line3}"\n\nProblems:\n${fixPrompt}\n\nProvide the corrected haiku with ALL three lines (keep correct lines unchanged).` }],
+        });
+        const fixed = parseJSON(fixRaw);
+
+        // Re-check the fixed version
+        const recheck = await checkSyllablesServer(fixed);
+        if (recheck && recheck[0].total === 5 && recheck[1].total === 7 && recheck[2].total === 5) {
+          verified.line1 = fixed.line1;
+          verified.line2 = fixed.line2;
+          verified.line3 = fixed.line3;
+          verified.s1 = 5;
+          verified.s2 = 7;
+          verified.s3 = 5;
+        }
+      } catch {
+        // Fix attempt failed — keep original, bars show actual counts
+      }
+    }
+  }
+
+  return verified;
 }
 
 // ── Text conversion ──
@@ -1485,6 +1544,52 @@ function updateSylCount(inputEl, countEl, target) {
   }
 }
 
+let sylDebounceTimer = null;
+
+function updateSylCountAsync(inputEl, countEl, target) {
+  const text = inputEl.value.trim();
+  if (!text) {
+    countEl.textContent = '';
+    countEl.className = 'syl-count empty';
+    return;
+  }
+
+  // Show loading state
+  countEl.textContent = '...';
+  countEl.className = 'syl-count empty';
+
+  clearTimeout(sylDebounceTimer);
+  sylDebounceTimer = setTimeout(async () => {
+    try {
+      const res = await fetch('/api/syllables', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lines: [text] }),
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const count = data.results[0].total;
+
+      if (inputEl.value.trim() === text) {
+        if (count === target) {
+          countEl.textContent = count + '/' + target + ' ✓';
+          countEl.className = 'syl-count ok';
+        } else {
+          countEl.textContent = count + '/' + target + ' ⚠';
+          countEl.className = 'syl-count warn';
+        }
+      }
+    } catch {
+      // Fall back to client-side heuristic
+      const count = countSyllables(text);
+      if (inputEl.value.trim() === text) {
+        countEl.textContent = '~' + count + '/' + target;
+        countEl.className = count === target ? 'syl-count ok' : 'syl-count warn';
+      }
+    }
+  }, 400);
+}
+
 // ── Custom mode wiring ──
 const customDropzone = $('custom-dropzone');
 const customFileInput = $('custom-file-input');
@@ -1525,15 +1630,15 @@ function handleCustomFile(file) {
 
 // Custom line input listeners
 $('custom-line1').addEventListener('input', () => {
-  updateSylCount($('custom-line1'), $('syl-count-1'), 5);
+  updateSylCountAsync($('custom-line1'), $('syl-count-1'), 5);
   updateConvertBtn();
 });
 $('custom-line2').addEventListener('input', () => {
-  updateSylCount($('custom-line2'), $('syl-count-2'), 7);
+  updateSylCountAsync($('custom-line2'), $('syl-count-2'), 7);
   updateConvertBtn();
 });
 $('custom-line3').addEventListener('input', () => {
-  updateSylCount($('custom-line3'), $('syl-count-3'), 5);
+  updateSylCountAsync($('custom-line3'), $('syl-count-3'), 5);
   updateConvertBtn();
 });
 
