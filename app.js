@@ -443,6 +443,51 @@ async function parseJSONWithRetry(raw, originalMessages, jsonFormat) {
   }
 }
 
+// ── Syllable verification ──
+async function verifyAndFixHaiku(haiku) {
+  const verifyMessages = [{
+    role: 'user',
+    content: `Verify this haiku is exactly 5-7-5 syllables. Fix any line that's wrong.\n\nLine 1 (needs 5): "${haiku.line1}"\nLine 2 (needs 7): "${haiku.line2}"\nLine 3 (needs 5): "${haiku.line3}"`,
+  }];
+  const jsonFormat = '{"line1":"text","line2":"text","line3":"text","s1":<count>,"s2":<count>,"s3":<count>,"fixed":true/false}';
+  const raw = await callClaude({
+    system: `You are a syllable counting expert. Your ONLY job is to verify and fix haiku syllable counts.
+
+TASK:
+1. Count the syllables in each line by breaking every word into its syllable parts
+2. If ALL lines are correct (5-7-5), return the haiku unchanged
+3. If ANY line has the wrong count, rewrite ONLY that line to hit the target while preserving the meaning and tone as closely as possible
+
+SYLLABLE COUNTING RULES:
+- Break each word into spoken syllable parts: "or-e-gon" = 3, "an-oth-er" = 3, "beau-ty" = 2
+- Silent e: "fire" = 1, "smile" = 1, "life" = 1, "love" = 1
+- Common words: "every" = 3 (ev-er-y), "different" = 2 (dif-frent), "interesting" = 3 (in-trest-ing), "chocolate" = 3 (choc-o-late), "comfortable" = 3 (comf-ter-ble), "evening" = 2 (eve-ning), "family" = 3 (fam-i-ly), "several" = 3 (sev-er-al), "actually" = 4 (ac-tu-al-ly), "camera" = 3 (cam-er-a), "natural" = 3 (nat-ur-al)
+- When in doubt, say the word aloud slowly and count the beats
+
+Respond ONLY with raw JSON — no markdown, no backticks, nothing else.
+Format: ${jsonFormat}
+
+Set "fixed" to true if you changed any line, false if the original was correct.
+All lines must be lowercase.`,
+    messages: verifyMessages,
+  });
+
+  try {
+    const result = await parseJSONWithRetry(raw, verifyMessages, jsonFormat);
+    return {
+      line1: result.line1 || haiku.line1,
+      line2: result.line2 || haiku.line2,
+      line3: result.line3 || haiku.line3,
+      s1: result.s1 ?? 5,
+      s2: result.s2 ?? 7,
+      s3: result.s3 ?? 5,
+    };
+  } catch {
+    console.warn('haiku verification failed, using original');
+    return haiku;
+  }
+}
+
 // ── Text conversion ──
 async function convertText(text) {
   const messages = [{ role: 'user', content: `Text: "${text}"` }];
@@ -457,12 +502,20 @@ VOCABULARY GUIDELINES:
 - The best haiku feel like a joke, a punch line, or a sharp observation — not a greeting card
 - Surprise the reader with the third line — subvert expectations
 
+SYLLABLE COUNTING — THIS IS CRITICAL:
+- Before finalizing, count the syllables in each line by breaking every word into syllable parts
+- Common traps: "fire" = 1 syllable (not 2), "every" = 3 syllables, "poem" = 2, "real" = 1, "cruel" = 1, "orange" = 2, "chocolate" = 3, "comfortable" = 3, "different" = 2, "interesting" = 3 (not 4), "camera" = 3 (not 2), "natural" = 3 (not 2), "actually" = 4 (not 3), "valuable" = 3, "several" = 3 (not 2), "business" = 2, "evening" = 2 (not 3), "family" = 3 (not 2)
+- Double-check: count each word's syllables individually, then sum per line
+- Line 1 MUST equal exactly 5, line 2 MUST equal exactly 7, line 3 MUST equal exactly 5
+- If a line doesn't hit the target, rewrite it until it does — do not submit a haiku with wrong counts
+
 Respond ONLY with raw JSON — no markdown, no backticks, nothing else.
 Format: ${jsonFormat}
-Count syllables very carefully. All lines lowercase. ${TONES[tone]}`,
+All lines lowercase. ${TONES[tone]}`,
     messages,
   });
-  return parseJSONWithRetry(raw, messages, jsonFormat);
+  const haiku = await parseJSONWithRetry(raw, messages, jsonFormat);
+  return verifyAndFixHaiku(haiku);
 }
 
 // ── Image conversion ──
@@ -504,19 +557,30 @@ VOCABULARY GUIDELINES:
 - The best haiku feel like a joke, a punch line, or a sharp observation — not a greeting card
 - Surprise the reader with the third line — subvert expectations
 
+SYLLABLE COUNTING — THIS IS CRITICAL:
+- Before finalizing, count the syllables in each line by breaking every word into syllable parts
+- Common traps: "fire" = 1 syllable (not 2), "every" = 3 syllables, "poem" = 2, "real" = 1, "cruel" = 1, "orange" = 2, "chocolate" = 3, "comfortable" = 3, "different" = 2, "interesting" = 3 (not 4), "camera" = 3 (not 2), "natural" = 3 (not 2), "actually" = 4 (not 3), "valuable" = 3, "several" = 3 (not 2), "business" = 2, "evening" = 2 (not 3), "family" = 3 (not 2)
+- Double-check: count each word's syllables individually, then sum per line
+- Line 1 MUST equal exactly 5, line 2 MUST equal exactly 7, line 3 MUST equal exactly 5
+- If a line doesn't hit the target, rewrite it until it does — do not submit a haiku with wrong counts
+
 Respond ONLY with a raw JSON array — no markdown, no backticks.
 Format: ${batchFormat}
-Same order as input. Count syllables carefully. All lines lowercase. ${TONES[tone]}`,
+Same order as input. All lines lowercase. ${TONES[tone]}`,
     messages: batchMessages,
   });
 
   const haikus = await parseJSONWithRetry(batchRaw, batchMessages, batchFormat);
   if (!Array.isArray(haikus)) throw new Error('unexpected api response.');
 
+  const verifiedHaikus = await Promise.all(
+    haikus.map(h => h ? verifyAndFixHaiku(h) : null)
+  );
+
   return posts.map((p, i) => ({
     source: (p.author ? `@${p.author}: ` : '') + p.text.slice(0, 80),
     fullSource: (p.author ? `@${p.author}: ` : '') + p.text,
-    haiku: haikus[i] || null,
+    haiku: verifiedHaikus[i] || null,
     tone,
   })).filter(r => r.haiku);
 }
@@ -560,12 +624,20 @@ VOCABULARY GUIDELINES:
 - The best haiku feel like a joke, a punch line, or a sharp observation — not a greeting card
 - Surprise the reader with the third line — subvert expectations
 
+SYLLABLE COUNTING — THIS IS CRITICAL:
+- Before finalizing, count the syllables in each line by breaking every word into syllable parts
+- Common traps: "fire" = 1 syllable (not 2), "every" = 3 syllables, "poem" = 2, "real" = 1, "cruel" = 1, "orange" = 2, "chocolate" = 3, "comfortable" = 3, "different" = 2, "interesting" = 3 (not 4), "camera" = 3 (not 2), "natural" = 3 (not 2), "actually" = 4 (not 3), "valuable" = 3, "several" = 3 (not 2), "business" = 2, "evening" = 2 (not 3), "family" = 3 (not 2)
+- Double-check: count each word's syllables individually, then sum per line
+- Line 1 MUST equal exactly 5, line 2 MUST equal exactly 7, line 3 MUST equal exactly 5
+- If a line doesn't hit the target, rewrite it until it does — do not submit a haiku with wrong counts
+
 Respond ONLY with raw JSON — no markdown, no backticks, nothing else.
 Format: ${jsonFormat}
-Count syllables very carefully. All lines lowercase. ${TONES[tone]}`,
+All lines lowercase. ${TONES[tone]}`,
     messages,
   });
-  return parseJSONWithRetry(raw, messages, jsonFormat);
+  const haiku = await parseJSONWithRetry(raw, messages, jsonFormat);
+  return verifyAndFixHaiku(haiku);
 }
 
 // ── Haiku image generation ──
