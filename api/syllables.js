@@ -37,6 +37,13 @@ function countWord(word) {
 
   if (dict[lookup] !== undefined) return dict[lookup];
 
+  // Acronyms: all-uppercase words of 2-5 letters get one syllable per letter
+  // Check against the original word (before lowercasing) stripped of non-alpha chars
+  const alpha = word.replace(/[^a-zA-Z]/g, '');
+  if (alpha.length >= 2 && alpha.length <= 5 && alpha === alpha.toUpperCase()) {
+    return alpha.length;
+  }
+
   return heuristicCount(lookup);
 }
 
@@ -48,8 +55,10 @@ function countLine(line) {
   for (const word of words) {
     const count = countWord(word);
     const cleanWord = word.toLowerCase().replace(/[^a-z']/g, '').replace(/'s$/, '').replace(/'$/, '');
+    const alpha = word.replace(/[^a-zA-Z]/g, '');
+    const isAcronym = alpha.length >= 2 && alpha.length <= 5 && alpha === alpha.toUpperCase() && dict[cleanWord] === undefined;
     total += count;
-    breakdown.push({ word, syllables: count, source: dict[cleanWord] !== undefined ? 'dict' : 'heuristic' });
+    breakdown.push({ word, syllables: count, source: dict[cleanWord] !== undefined ? 'dict' : isAcronym ? 'acronym' : 'heuristic' });
   }
 
   return { total, breakdown };
