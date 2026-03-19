@@ -362,9 +362,11 @@ async function convert() {
         });
       } else {
         const haiku = await convertImage(capturedImageB64, capturedImageMime);
+        const imageDesc = haiku.desc || 'Image';
+        delete haiku.desc;
         results = [{
-          source: 'image',
-          fullSource: 'image',
+          source: imageDesc,
+          fullSource: imageDesc,
           haiku,
           tone,
           sourceImageB64: capturedImageB64,
@@ -670,11 +672,13 @@ async function convertImage(b64, mime) {
       { type: 'text', text: 'Write a haiku about this image.' }
     ]
   }];
-  const jsonFormat = '{"line1":"text","line2":"text","line3":"text","s1":5,"s2":7,"s3":5}';
+  const jsonFormat = '{"line1":"text","line2":"text","line3":"text","s1":5,"s2":7,"s3":5,"desc":"short image description"}';
   const raw = await callClaude({
     system: `You are a haiku master. Look at this image and write a perfect haiku (5-7-5 syllables) about what you see, feel, or find funny about it.
 
-Don't describe the image literally — capture the feeling, the absurdity, the irony, or the beauty of the moment. React to it like a human would.
+Also include a "desc" field: a short plain-English description of the image in under 10 words (e.g. "a cat sitting on a keyboard", "sunset over a mountain lake"). This is used for alt text.
+
+Don't describe the image literally in the haiku — capture the feeling, the absurdity, the irony, or the beauty of the moment. React to it like a human would.
 
 VOCABULARY GUIDELINES:
 - Avoid overusing these common poetic defaults: weep, weeping, cosmic, eternal, sacred, ancient, whisper, whispers, void, soul, divine, mortal, fate, silent, echo, tears, abyss, fleeting, destiny, beneath, descend, gentle, wisdom — they're not banned, but vary your word choices and reach for fresher alternatives when possible
@@ -1354,6 +1358,30 @@ function renderResults(results) {
   }
 }
 
+function generateAltText(source, haiku) {
+  let prefix;
+  if (!source || source === 'image' || source.trim() === '') {
+    prefix = 'Image';
+  } else if (source.length <= 80) {
+    prefix = source;
+  } else {
+    let truncated = source.slice(0, 60);
+    const lastSpace = truncated.lastIndexOf(' ');
+    if (lastSpace > 20) truncated = truncated.slice(0, lastSpace);
+    prefix = truncated + '…';
+  }
+  const haikuPart = `"${haiku.line1} / ${haiku.line2} / ${haiku.line3}" — frogpond.lol`;
+  const full = `${prefix}, with a haiku: ${haikuPart}`;
+  if (full.length > 200) {
+    const maxPrefix = 200 - `, with a haiku: ${haikuPart}`.length;
+    let shortened = prefix.slice(0, maxPrefix - 1);
+    const sp = shortened.lastIndexOf(' ');
+    if (sp > 10) shortened = shortened.slice(0, sp);
+    return `${shortened}…, with a haiku: ${haikuPart}`;
+  }
+  return full;
+}
+
 function makeCard(r, idx) {
   const { source, fullSource, haiku, tone: t, sourceImageB64: srcB64, sourceMime: srcMime } = r;
   const card = document.createElement('div');
@@ -1386,6 +1414,7 @@ function makeCard(r, idx) {
         </div>
         <div class="card-actions">
           <button class="action-btn" data-copy="${esc(fullText)}">copy haiku</button>
+          <button class="action-btn" data-alt-text>copy alt text</button>
           <button class="action-btn" data-export>export ↓</button>
           <button class="action-btn" data-speak="${esc(fullText)}" data-speak-source="${esc(fullSource || source)}">read aloud</button>
         </div>
@@ -1486,6 +1515,12 @@ function makeCard(r, idx) {
           this.textContent = '// copied!'; this.classList.add('ok');
           setTimeout(() => { this.textContent = orig; this.classList.remove('ok'); }, 1800);
           if (window.posthog) posthog.capture('haiku_copied');
+        });
+      } else if ('altText' in this.dataset) {
+        const altText = generateAltText(r.fullSource || r.source, r.haiku);
+        navigator.clipboard.writeText(altText).then(() => {
+          this.textContent = '// copied!'; this.classList.add('ok');
+          setTimeout(() => { this.textContent = orig; this.classList.remove('ok'); }, 1800);
         });
       } else if ('export' in this.dataset) {
         const isOpen = !panel.classList.contains('hidden');
