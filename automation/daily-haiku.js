@@ -25,10 +25,10 @@ const path = require("path");
 
 // ── Register bundled fonts (needed for CI/GitHub Actions) ───────────────────
 const fontsDir = path.join(__dirname, "fonts");
-GlobalFonts.registerFromPath(path.join(fontsDir, "CourierPrime-Regular.ttf"), "Courier Prime");
-GlobalFonts.registerFromPath(path.join(fontsDir, "CourierPrime-Bold.ttf"), "Courier Prime");
-GlobalFonts.registerFromPath(path.join(fontsDir, "EBGaramond-Regular.ttf"), "EB Garamond");
-GlobalFonts.registerFromPath(path.join(fontsDir, "EBGaramond-Italic.ttf"), "EB Garamond Italic");
+GlobalFonts.registerFromPath(path.join(fontsDir, "CourierPrime-Regular.ttf"));
+GlobalFonts.registerFromPath(path.join(fontsDir, "CourierPrime-Bold.ttf"));
+GlobalFonts.registerFromPath(path.join(fontsDir, "LiberationSerif-Regular.ttf"));
+GlobalFonts.registerFromPath(path.join(fontsDir, "LiberationSerif-Italic.ttf"));
 
 // ── Config ──────────────────────────────────────────────────────────────────
 
@@ -280,8 +280,7 @@ function renderCardImage(haiku, sourceText) {
   const accent = "#4a6a30";
   const border = "#c8bfa8";
   const mono = "Courier Prime";
-  const serif = "EB Garamond";
-  const serifItalic = "EB Garamond Italic";
+  const serif = "Liberation Serif";
 
   // Background
   ctx.fillStyle = bg;
@@ -375,7 +374,7 @@ function renderCardImage(haiku, sourceText) {
     ctx.fillStyle = dim;
     ctx.textBaseline = "top";
     ctx.fillText(String(syl), LEFT, y + 16);
-    ctx.font = `52px "${serifItalic}"`;
+    ctx.font = `italic 52px "${serif}"`;
     ctx.fillStyle = text;
     ctx.fillText(line, TEXT_LEFT, y);
     y += lineHeight;
