@@ -28,7 +28,7 @@ const fontsDir = path.join(__dirname, "fonts");
 GlobalFonts.registerFromPath(path.join(fontsDir, "CourierPrime-Regular.ttf"), "Courier Prime");
 GlobalFonts.registerFromPath(path.join(fontsDir, "CourierPrime-Bold.ttf"), "Courier Prime");
 GlobalFonts.registerFromPath(path.join(fontsDir, "EBGaramond-Regular.ttf"), "EB Garamond");
-GlobalFonts.registerFromPath(path.join(fontsDir, "EBGaramond-Italic.ttf"), "EB Garamond");
+GlobalFonts.registerFromPath(path.join(fontsDir, "EBGaramond-Italic.ttf"), "EB Garamond Italic");
 
 // ── Config ──────────────────────────────────────────────────────────────────
 
@@ -281,6 +281,7 @@ function renderCardImage(haiku, sourceText) {
   const border = "#c8bfa8";
   const mono = "Courier Prime";
   const serif = "EB Garamond";
+  const serifItalic = "EB Garamond Italic";
 
   // Background
   ctx.fillStyle = bg;
@@ -374,7 +375,7 @@ function renderCardImage(haiku, sourceText) {
     ctx.fillStyle = dim;
     ctx.textBaseline = "top";
     ctx.fillText(String(syl), LEFT, y + 16);
-    ctx.font = `italic 52px "${serif}"`;
+    ctx.font = `52px "${serifItalic}"`;
     ctx.fillStyle = text;
     ctx.fillText(line, TEXT_LEFT, y);
     y += lineHeight;
