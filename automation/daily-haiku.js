@@ -19,9 +19,16 @@
  *   TONE              - "absurd" | "sincere" | "poetic" (default: weighted random, 80% absurd)
  */
 
-const { createCanvas } = require("@napi-rs/canvas");
+const { createCanvas, GlobalFonts } = require("@napi-rs/canvas");
 const fs = require("fs");
 const path = require("path");
+
+// ── Register bundled fonts (needed for CI/GitHub Actions) ───────────────────
+const fontsDir = path.join(__dirname, "fonts");
+GlobalFonts.registerFromPath(path.join(fontsDir, "CourierPrime-Regular.ttf"), "Courier Prime");
+GlobalFonts.registerFromPath(path.join(fontsDir, "CourierPrime-Bold.ttf"), "Courier Prime");
+GlobalFonts.registerFromPath(path.join(fontsDir, "EBGaramond-Regular.ttf"), "EB Garamond");
+GlobalFonts.registerFromPath(path.join(fontsDir, "EBGaramond-Italic.ttf"), "EB Garamond");
 
 // ── Config ──────────────────────────────────────────────────────────────────
 
@@ -272,8 +279,8 @@ function renderCardImage(haiku, sourceText) {
   const dim = "#887050";
   const accent = "#4a6a30";
   const border = "#c8bfa8";
-  const mono = "Courier New";
-  const serif = "Georgia";
+  const mono = "Courier Prime";
+  const serif = "EB Garamond";
 
   // Background
   ctx.fillStyle = bg;
