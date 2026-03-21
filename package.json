@@ -3,5 +3,9 @@
   "version": "1.0.0",
   "engines": {
     "node": "20.x"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^0.1.97",
+    "formdata-node": "^6.0.3"
   }
 }

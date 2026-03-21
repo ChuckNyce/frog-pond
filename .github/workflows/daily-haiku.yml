@@ -1,0 +1,29 @@
+name: Daily Haiku Pipeline
+
+on:
+  schedule:
+    # Run at 8am and 4pm ET (12:00 and 20:00 UTC)
+    - cron: '0 12 * * *'
+    - cron: '0 20 * * *'
+  workflow_dispatch: # Manual trigger from GitHub UI
+
+jobs:
+  generate-haikus:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install @napi-rs/canvas formdata-node
+
+      - name: Run daily haiku pipeline
+        env:
+          NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          BUFFER_API_KEY: ${{ secrets.BUFFER_API_KEY }}
+          HAIKU_COUNT: '5'
+        run: node automation/daily-haiku.js
