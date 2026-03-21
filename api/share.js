@@ -128,6 +128,7 @@ module.exports = async function handler(req, res) {
     </div>
     <div id="share-actions" class="share-actions hidden">
       <button class="share-action-btn" id="copy-haiku">copy haiku</button>
+      <button class="share-action-btn" id="copy-alt-text">copy alt text</button>
       <button class="share-action-btn" id="download-image">download</button>
       <button class="share-action-btn" id="save-image">share</button>
       <button class="share-action-btn" id="copy-link">copy link</button>
@@ -235,6 +236,29 @@ module.exports = async function handler(req, res) {
     ctx.fillText(brand, unitX + frogW + brandGap, frogTopY + frogBlockH / 2);
     return new Promise(function(resolve) { cvs.toBlob(resolve, 'image/png'); });
   }
+  function generateAltText(source, line1, line2, line3) {
+    var prefix;
+    if (!source || source === 'image' || source.trim() === '') {
+      prefix = 'Image';
+    } else if (source.length <= 80) {
+      prefix = source;
+    } else {
+      var truncated = source.slice(0, 60);
+      var lastSpace = truncated.lastIndexOf(' ');
+      if (lastSpace > 20) truncated = truncated.slice(0, lastSpace);
+      prefix = truncated + '\\u2026';
+    }
+    var haikuPart = '"' + line1 + ' / ' + line2 + ' / ' + line3 + '" \\u2014 frogpond.lol';
+    var full = prefix + ', with a haiku: ' + haikuPart;
+    if (full.length > 200) {
+      var maxPrefix = 200 - (', with a haiku: ' + haikuPart).length;
+      var shortened = prefix.slice(0, maxPrefix - 1);
+      var sp = shortened.lastIndexOf(' ');
+      if (sp > 10) shortened = shortened.slice(0, sp);
+      return shortened + '\\u2026, with a haiku: ' + haikuPart;
+    }
+    return full;
+  }
   try {
     const params = new URLSearchParams(window.location.search);
     const encoded = params.get('h');
@@ -277,6 +301,13 @@ module.exports = async function handler(req, res) {
       navigator.clipboard.writeText(fullText + '\\n\\n-- frogpond.lol').then(() => {
         this.textContent = '// copied!'; this.classList.add('ok');
         setTimeout(() => { this.textContent = 'copy haiku'; this.classList.remove('ok'); }, 1800);
+      });
+    });
+    document.getElementById('copy-alt-text').addEventListener('click', function() {
+      var altText = generateAltText(source, line1, line2, line3);
+      navigator.clipboard.writeText(altText).then(() => {
+        this.textContent = '// copied!'; this.classList.add('ok');
+        setTimeout(() => { this.textContent = 'copy alt text'; this.classList.remove('ok'); }, 1800);
       });
     });
     document.getElementById('copy-link').addEventListener('click', function() {
