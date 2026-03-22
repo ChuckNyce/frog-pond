@@ -60,80 +60,9 @@ async function notifyDiscord(message) {
   }
 }
 
-// ── Syllable counting (ported from api/syllables.js) ────────────────────────
+// ── Haiku engine (shared module with full frogpond.lol constraints) ─────────
 
-const dict = JSON.parse(
-  fs.readFileSync(path.join(__dirname, "..", "cmu-syllables.json"), "utf8")
-);
-
-function heuristicCount(word) {
-  const w = word.toLowerCase().replace(/[^a-z]/g, "");
-  if (!w) return 0;
-  const exceptions = {
-    fire: 1, hire: 1, wire: 1, tire: 1, dire: 1,
-    our: 1, hour: 1, their: 1, there: 1, where: 1,
-    were: 1, here: 1, mere: 1, the: 1, are: 1,
-    world: 1, girl: 1, pearl: 1, curl: 1, swirl: 1,
-  };
-  if (exceptions[w]) return exceptions[w];
-  let count = (w.match(/[aeiouy]+/g) || []).length;
-  if (w.endsWith("e") && !w.endsWith("le") && count > 1) count--;
-  if (
-    w.endsWith("ed") &&
-    !w.endsWith("ted") &&
-    !w.endsWith("ded") &&
-    count > 1
-  )
-    count--;
-  return Math.max(1, count);
-}
-
-function countWord(word) {
-  const clean = word.toLowerCase().replace(/[^a-z']/g, "");
-  if (!clean) return 0;
-  const lookup = clean.replace(/'s$/, "").replace(/'$/, "");
-  if (dict[lookup] !== undefined) return dict[lookup];
-  return heuristicCount(lookup);
-}
-
-function countLine(line) {
-  const words = line
-    .trim()
-    .split(/\s+/)
-    .filter((w) => w.length > 0);
-  return words.reduce((sum, w) => sum + countWord(w), 0);
-}
-
-function verifySyllables(haiku) {
-  return {
-    s1: countLine(haiku.line1),
-    s2: countLine(haiku.line2),
-    s3: countLine(haiku.line3),
-    valid:
-      countLine(haiku.line1) === 5 &&
-      countLine(haiku.line2) === 7 &&
-      countLine(haiku.line3) === 5,
-  };
-}
-
-// ── Tone system ─────────────────────────────────────────────────────────────
-
-const TONES = {
-  absurd:
-    "Make it hilariously absurd — elevate mundane things into cosmic tragedy. Go weird. Subvert expectations. The haiku should make someone snort-laugh.",
-  sincere:
-    "Treat the content with genuine sincerity and real emotional weight. Find the human truth in it.",
-  poetic:
-    "Find hidden beauty and quiet melancholy, like a classic Japanese poet. Wabi-sabi. The fleeting nature of things.",
-};
-
-function pickTone() {
-  // 80% absurd, 10% sincere, 10% poetic
-  const r = Math.random();
-  if (r < 0.8) return "absurd";
-  if (r < 0.9) return "sincere";
-  return "poetic";
-}
+const { generateHaiku: _generateHaiku, pickTone } = require("./haiku-engine");
 
 // ── Fetch trending topics ───────────────────────────────────────────────────
 
@@ -199,86 +128,9 @@ async function fetchTrendingTopics(count) {
 
 // ── Generate haiku via Claude ───────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are a haiku master for frogpond.lol. You convert trending news into haikus.
-
-STRICT RULES:
-- Line 1: exactly 5 syllables
-- Line 2: exactly 7 syllables
-- Line 3: exactly 5 syllables
-- Count carefully. Verify each line before responding.
-- Respond ONLY with valid JSON: {"line1":"...","line2":"...","line3":"..."}
-- No markdown, no explanation, just the JSON object.
-- Use lowercase for all lines unless a proper noun.
-- Be clever. Find the unexpected angle. Don't just summarize — react.`;
-
-async function generateHaiku(topic, tone) {
-  const toneInstruction = TONES[tone];
-  const userMessage = `Tone: ${toneInstruction}
-
-News headline: "${topic.title}"
-Context: ${topic.description}
-
-Write a haiku about this. Remember: 5-7-5 syllables, strictly.`;
-
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 200,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: userMessage }],
-    }),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Claude API error: ${res.status} ${await res.text()}`);
-  }
-
-  const data = await res.json();
-  const text = data.content[0].text.trim();
-
-  // Parse JSON response
-  const haiku = JSON.parse(text);
-
-  // Verify and attach syllable counts
-  const counts = verifySyllables(haiku);
-  haiku.s1 = counts.s1;
-  haiku.s2 = counts.s2;
-  haiku.s3 = counts.s3;
-
-  return haiku;
-}
-
-async function generateHaikuWithRetry(topic, tone, maxRetries = 2) {
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      const haiku = await generateHaiku(topic, tone);
-      const counts = verifySyllables(haiku);
-
-      if (counts.valid) {
-        return haiku;
-      }
-
-      if (attempt < maxRetries) {
-        console.log(
-          `  Syllable mismatch (${counts.s1}/${counts.s2}/${counts.s3}), retrying...`
-        );
-      } else {
-        console.log(
-          `  Keeping haiku despite syllable count (${counts.s1}/${counts.s2}/${counts.s3})`
-        );
-        return haiku;
-      }
-    } catch (err) {
-      if (attempt === maxRetries) throw err;
-      console.log(`  Parse error, retrying: ${err.message}`);
-    }
-  }
+async function generateHaikuForTopic(topic, tone) {
+  const promptText = `News headline: "${topic.title}"\nContext: ${topic.description}`;
+  return _generateHaiku(ANTHROPIC_API_KEY, promptText, tone);
 }
 
 // ── Render card image (ported from app.js generateHaikuImage) ───────────────
@@ -581,7 +433,7 @@ async function main() {
 
     try {
       // Generate haiku
-      const haiku = await generateHaikuWithRetry(topic, tone);
+      const haiku = await generateHaikuForTopic(topic, tone);
       console.log(
         `   Haiku: ${haiku.line1} / ${haiku.line2} / ${haiku.line3} (${haiku.s1}/${haiku.s2}/${haiku.s3})`
       );

@@ -229,47 +229,13 @@ async function scorePost(post) {
   return result;
 }
 
-// ── Stage 3: Generate haiku replies ─────────────────────────────────────────
+// ── Stage 3: Generate haiku replies (using shared engine) ───────────────────
 
-const REPLY_PROMPT = `You are bash0, a haiku bot on Bluesky (@frogpond.lol). You write absurd, witty haiku replies to posts.
-
-RULES:
-- Line 1: exactly 5 syllables
-- Line 2: exactly 7 syllables
-- Line 3: exactly 5 syllables
-- Count carefully. Verify each line.
-- Be clever, absurd, unexpected. Don't just summarize — react.
-- Match the energy of the original post.
-- Never be mean-spirited. Absurd ≠ cruel.
-
-Generate 2 haiku reply options. One absurd, one with a different tone (sincere or poetic).
-
-Respond with ONLY valid JSON array: [{"line1":"...","line2":"...","line3":"...","tone":"absurd"}, {"line1":"...","line2":"...","line3":"...","tone":"sincere"}]`;
+const { generateReplyOptions } = require("./haiku-engine");
 
 async function generateReplies(post) {
   const text = post.record?.text || "";
-
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 400,
-      system: REPLY_PROMPT,
-      messages: [{
-        role: "user",
-        content: `Reply to this post:\n"${text.slice(0, 500)}"`,
-      }],
-    }),
-  });
-
-  if (!res.ok) throw new Error(`Claude reply generation error: ${res.status}`);
-  const data = await res.json();
-  return JSON.parse(data.content[0].text.trim());
+  return generateReplyOptions(ANTHROPIC_API_KEY, text, ["absurd", "sincere"]);
 }
 
 // ── Buffer API ──────────────────────────────────────────────────────────────
