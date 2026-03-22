@@ -25,5 +25,6 @@ jobs:
           NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           BUFFER_API_KEY: ${{ secrets.BUFFER_API_KEY }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           HAIKU_COUNT: '5'
         run: node automation/daily-haiku.js

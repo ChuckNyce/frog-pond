@@ -35,6 +35,7 @@ GlobalFonts.registerFromPath(path.join(fontsDir, "LiberationSerif-Italic.ttf"));
 const NEWSAPI_KEY = process.env.NEWSAPI_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const BUFFER_API_KEY = process.env.BUFFER_API_KEY;
+const DISCORD_WEBHOOK = process.env.DISCORD_WEBHOOK;
 const HAIKU_COUNT = parseInt(process.env.HAIKU_COUNT || "5", 10);
 
 if (!NEWSAPI_KEY || !ANTHROPIC_API_KEY || !BUFFER_API_KEY) {
@@ -42,6 +43,21 @@ if (!NEWSAPI_KEY || !ANTHROPIC_API_KEY || !BUFFER_API_KEY) {
     "Missing required env vars: NEWSAPI_KEY, ANTHROPIC_API_KEY, BUFFER_API_KEY"
   );
   process.exit(1);
+}
+
+// ── Discord notifications ───────────────────────────────────────────────────
+
+async function notifyDiscord(message) {
+  if (!DISCORD_WEBHOOK) return;
+  try {
+    await fetch(DISCORD_WEBHOOK, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: message }),
+    });
+  } catch (err) {
+    console.error("Discord notification failed:", err.message);
+  }
 }
 
 // ── Syllable counting (ported from api/syllables.js) ────────────────────────
@@ -610,9 +626,12 @@ async function main() {
 
   console.log("=== Done ===");
   console.log(`   ${success} haikus queued in Buffer Ideas, ${failed} failed`);
+
+  await notifyDiscord(`🐸 **Daily Haiku** — ${success} haikus queued in Buffer Ideas${failed > 0 ? `, ${failed} failed` : ""}`);
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
+  await notifyDiscord(`🐸❌ **Daily Haiku FAILED:** ${err.message}`);
   console.error("Fatal error:", err);
   process.exit(1);
 });

@@ -1,0 +1,28 @@
+name: Engagement Discovery Pipeline
+
+on:
+  schedule:
+    # Run every 4 hours: 6am, 10am, 2pm, 6pm, 10pm ET
+    - cron: '0 10,14,18,22,2 * * *'
+  workflow_dispatch: # Manual trigger from GitHub UI
+
+jobs:
+  discover-replies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run engagement discovery pipeline
+        env:
+          BSKY_IDENTIFIER: ${{ secrets.BSKY_IDENTIFIER }}
+          BSKY_APP_PASSWORD: ${{ secrets.BSKY_APP_PASSWORD }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          BUFFER_API_KEY: ${{ secrets.BUFFER_API_KEY }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          MAX_CANDIDATES: '20'
+          MAX_REPLIES: '5'
+        run: node automation/discover-replies.js
