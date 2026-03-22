@@ -192,7 +192,13 @@ LOW SCORES (1-4) - AUTO SKIP:
 - Very inside-joke content that outsiders can't engage with
 - Content in languages other than English
 
-Respond with ONLY valid JSON: {"score": N, "reason": "brief explanation"}`;
+Also recommend the engagement strategy:
+- "quote" — Post shows up on Bash0's timeline as content. Use when the post is interesting enough that Bash0's followers should see it too.
+- "reply" — Reply sits in the OP's thread. Use when the OP has a large following (10K+) and the thread is active, so the reply gets seen by their audience.
+
+Consider the author's follower count and the post's engagement when choosing.
+
+Respond with ONLY valid JSON: {"score": N, "reason": "brief explanation", "strategy": "quote" or "reply"}`;
 
 async function scorePost(post) {
   const text = post.record?.text || "";
@@ -212,7 +218,7 @@ async function scorePost(post) {
       system: SCORING_PROMPT,
       messages: [{
         role: "user",
-        content: `Post by @${author} (${likes} likes):\n"${text.slice(0, 500)}"`,
+        content: `Post by @${author} (${likes} likes, ${post.author?.followersCount || "unknown"} followers):\n"${text.slice(0, 500)}"`,
       }],
     }),
   });
@@ -333,7 +339,7 @@ async function main() {
     try {
       const score = await scorePost(post);
       const text = (post.record?.text || "").slice(0, 80);
-      console.log(`   [${score.score}/10] @${post.author?.handle}: "${text}..." — ${score.reason}`);
+      console.log(`   [${score.score}/10] [${score.strategy || "quote"}] @${post.author?.handle}: "${text}..." — ${score.reason}`);
 
       if (score.score >= 8) {
         scored.push({ post, score });
@@ -366,7 +372,9 @@ async function main() {
     const url = postUrl(post);
     const likes = post.likeCount || 0;
 
-    console.log(`   @${author} (${likes} likes, score ${score.score}):`);
+    const strategy = score.strategy || "quote";
+    const followers = post.author?.followersCount || "?";
+    console.log(`   @${author} (${likes} likes, ${followers} followers, score ${score.score}, ${strategy}):`);
     console.log(`   "${text}..."`);
 
     try {
@@ -374,8 +382,9 @@ async function main() {
 
       for (let i = 0; i < replies.length; i++) {
         const reply = replies[i];
+        const strategyLabel = strategy === "quote" ? "📢 QUOTE REPLY" : "💬 DIRECT REPLY";
         const ideaText = [
-          `REPLY TO: @${author} (${likes} likes)`,
+          `${strategyLabel} to @${author} (${likes} likes, ${followers} followers)`,
           `"${(post.record?.text || "").slice(0, 200)}"`,
           "",
           `${url}`,
@@ -396,7 +405,8 @@ async function main() {
         console.log(`   → [${reply.tone}] ${reply.line1} / ${reply.line2} / ${reply.line3}`);
       }
 
-      discordLines.push(`**@${author}** (${likes}❤️) → "${text.slice(0, 60)}..."`);
+      const strategyEmoji = strategy === "quote" ? "📢" : "💬";
+      discordLines.push(`${strategyEmoji} **@${author}** (${likes}❤️) → "${text.slice(0, 60)}..."`);
       queued++;
     } catch (err) {
       console.error(`   Error: ${err.message}`);
