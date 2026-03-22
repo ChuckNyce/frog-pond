@@ -578,9 +578,15 @@ async function main() {
       const imageUrl = await uploadImageToImgur(imageBuffer);
       console.log(`   Image uploaded: ${imageUrl}`);
 
-      // Format post text — source on top, link, haiku image is the attachment
+      // Format post text — headline, haiku, frog, link, hashtags
       const postText = [
         `// ${topic.title}`,
+        "",
+        haiku.line1,
+        haiku.line2,
+        haiku.line3,
+        "",
+        "\uD83D\uDC38",
         "",
         topic.url,
         "",
