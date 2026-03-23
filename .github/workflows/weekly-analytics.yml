@@ -1,0 +1,33 @@
+name: Weekly Analytics Report
+
+on:
+  schedule:
+    # Run Sunday at 8pm ET (Monday 00:00 UTC)
+    - cron: '0 0 * * 1'
+  workflow_dispatch: # Manual trigger
+
+jobs:
+  analytics:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run weekly analytics
+        env:
+          BSKY_IDENTIFIER: ${{ secrets.BSKY_IDENTIFIER }}
+          BSKY_APP_PASSWORD: ${{ secrets.BSKY_APP_PASSWORD }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: node automation/weekly-analytics.js
+
+      - name: Commit analytics data
+        run: |
+          git config user.name "Algo Cracker Bot"
+          git config user.email "bot@frogpond.lol"
+          git add automation/analytics-data/ || true
+          git diff --staged --quiet || git commit -m "Weekly analytics report $(date +%Y-%m-%d)"
+          git push || true
