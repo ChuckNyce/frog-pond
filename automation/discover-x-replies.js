@@ -14,6 +14,7 @@
  *   ANTHROPIC_API_KEY       - Claude API key
  *   BUFFER_API_KEY_PERSONAL - Buffer API key (Charles's personal account)
  *   DISCORD_WEBHOOK         - Discord webhook URL
+ *   X_BEARER_TOKEN          - X/Twitter API Bearer Token
  *
  * Optional:
  *   MAX_CANDIDATES          - Max posts to evaluate (default: 15)
@@ -27,11 +28,12 @@ const fs = require("fs");
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const BUFFER_API_KEY = process.env.BUFFER_API_KEY_PERSONAL;
 const DISCORD_WEBHOOK = process.env.DISCORD_WEBHOOK;
+const X_BEARER_TOKEN = process.env.X_BEARER_TOKEN;
 const MAX_CANDIDATES = parseInt(process.env.MAX_CANDIDATES || "15", 10);
 const MAX_REPLIES = parseInt(process.env.MAX_REPLIES || "5", 10);
 
-if (!ANTHROPIC_API_KEY || !BUFFER_API_KEY) {
-  console.error("Missing required env vars: ANTHROPIC_API_KEY, BUFFER_API_KEY_PERSONAL");
+if (!ANTHROPIC_API_KEY || !BUFFER_API_KEY || !X_BEARER_TOKEN) {
+  console.error("Missing required env vars: ANTHROPIC_API_KEY, BUFFER_API_KEY_PERSONAL, X_BEARER_TOKEN");
   process.exit(1);
 }
 
@@ -64,135 +66,103 @@ async function notifyDiscord(message) {
 
 // ── Stage 1: Discover X posts via web search ────────────────────────────────
 
-// ── Discovery via Bluesky cross-search + RSS feeds ──────────────────────────
-// X doesn't have a free search API, so we use two approaches:
-// 1. Search Bluesky for vibe coding content (many builders cross-post)
-// 2. Fetch RSS feeds from known vibe coding aggregators/accounts
-// 3. Use web search API if available
+// ── Discovery via X/Twitter API ─────────────────────────────────────────────
 
-const BSKY_SEARCH_TERMS = [
-  "vibe coding",
-  "vibe code",
-  "built with claude",
-  "built with cursor",
-  "building in public",
-  "indie hacker AI",
-  "just shipped",
-  "side project AI",
-  "claude code",
-  "vibe coded",
+const X_SEARCH_QUERIES = [
+  '"vibe coding" -is:retweet lang:en',
+  '"vibe code" -is:retweet lang:en',
+  '"built with claude" -is:retweet lang:en',
+  '"built with cursor" -is:retweet lang:en',
+  '#buildinpublic AI -is:retweet lang:en',
+  '"indie hacker" AI shipped -is:retweet lang:en',
+  '"just launched" AI app -is:retweet lang:en',
+  '"side project" AI -is:retweet lang:en',
+  '"claude code" -is:retweet lang:en',
 ];
 
-// Known vibe coding accounts on X to monitor (curate over time)
-const MONITORED_ACCOUNTS = [
-  "maboroshi_and", "swyx", "levelsio", "danshipper", "mckaywrigley",
-  "maboroshi_and", "raaborahi", "tdinh_me", "marc_louvion",
-];
+async function searchX(query) {
+  const params = new URLSearchParams({
+    query,
+    max_results: "10",
+    "tweet.fields": "public_metrics,created_at,author_id",
+    expansions: "author_id",
+    "user.fields": "username,public_metrics",
+  });
 
-// RSS feeds for vibe coding / build-in-public content
-const RSS_FEEDS = [
-  "https://hnrss.org/newest?q=vibe+coding&points=10",
-  "https://hnrss.org/newest?q=build+in+public&points=10",
-];
+  const res = await fetch(
+    `https://api.x.com/2/tweets/search/recent?${params.toString()}`,
+    { headers: { Authorization: `Bearer ${X_BEARER_TOKEN}` } },
+  );
 
-async function searchBlueskyForX() {
-  // Many vibe coders cross-post to Bluesky — find them there
-  // These posts often contain X links or the same content
-  const posts = [];
-  const seen = new Set();
-
-  for (const term of BSKY_SEARCH_TERMS) {
-    try {
-      const res = await fetch(
-        `https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts?q=${encodeURIComponent(term)}&limit=10&sort=top`,
-      );
-      if (!res.ok) continue;
-      const data = await res.json();
-
-      if (data.posts) {
-        for (const post of data.posts) {
-          const text = post.record?.text || "";
-          if (seen.has(text.slice(0, 50))) continue;
-          seen.add(text.slice(0, 50));
-
-          // Only include posts with decent engagement
-          if ((post.likeCount || 0) < 5) continue;
-
-          posts.push({
-            author: `@${post.author?.handle || "unknown"}`,
-            text,
-            url: `https://bsky.app/profile/${post.author?.handle}/post/${post.uri?.split("/").pop()}`,
-            engagement: `${post.likeCount || 0} likes`,
-            followers: `${post.author?.followersCount || "unknown"}`,
-            source: "bluesky",
-          });
-        }
-      }
-    } catch {
-      // Continue on error
+  if (!res.ok) {
+    const errText = await res.text();
+    // Handle rate limits gracefully
+    if (res.status === 429) {
+      console.log("   X API rate limited, pausing...");
+      await new Promise((r) => setTimeout(r, 15000));
+      return [];
     }
-    await new Promise((r) => setTimeout(r, 300));
+    throw new Error(`X API error: ${res.status} ${errText.slice(0, 200)}`);
   }
 
-  return posts;
-}
+  const data = await res.json();
+  if (!data.data) return [];
 
-async function fetchRSSFeeds() {
-  const posts = [];
-
-  for (const feedUrl of RSS_FEEDS) {
-    try {
-      const res = await fetch(feedUrl);
-      if (!res.ok) continue;
-      const xml = await res.text();
-
-      // Simple XML parsing for RSS items
-      const items = xml.match(/<item>[\s\S]*?<\/item>/g) || [];
-      for (const item of items.slice(0, 5)) {
-        const title = (item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/) || item.match(/<title>(.*?)<\/title>/) || [])[1] || "";
-        const link = (item.match(/<link>(.*?)<\/link>/) || [])[1] || "";
-        const comments = (item.match(/<comments>(.*?)<\/comments>/) || [])[1] || "";
-
-        if (title && link) {
-          posts.push({
-            author: "HN",
-            text: title,
-            url: comments || link,
-            engagement: "HN front page",
-            followers: "unknown",
-            source: "hackernews",
-          });
-        }
-      }
-    } catch {
-      // Continue on error
-    }
+  // Build user lookup
+  const users = {};
+  for (const u of data.includes?.users || []) {
+    users[u.id] = u;
   }
 
-  return posts;
+  return data.data.map((tweet) => {
+    const user = users[tweet.author_id] || {};
+    const metrics = tweet.public_metrics || {};
+    return {
+      author: `@${user.username || "unknown"}`,
+      text: tweet.text,
+      url: `https://x.com/${user.username || "unknown"}/status/${tweet.id}`,
+      likes: metrics.like_count || 0,
+      retweets: metrics.retweet_count || 0,
+      replies: metrics.reply_count || 0,
+      engagement: `${metrics.like_count || 0} likes`,
+      followers: `${user.public_metrics?.followers_count || "unknown"}`,
+      createdAt: tweet.created_at,
+      source: "x",
+    };
+  });
 }
 
 async function discoverCandidates() {
   const allPosts = [];
   const seen = new Set();
 
-  // Source 1: Bluesky cross-search
-  console.log("   Searching Bluesky for vibe coding content...");
-  const bskyPosts = await searchBlueskyForX();
-  console.log(`   Found ${bskyPosts.length} posts on Bluesky`);
-  for (const post of bskyPosts) {
-    const key = (post.author + post.text?.slice(0, 50)).toLowerCase();
-    if (!seen.has(key)) { seen.add(key); allPosts.push(post); }
+  console.log(`   Searching X with ${X_SEARCH_QUERIES.length} queries...`);
+
+  for (const query of X_SEARCH_QUERIES) {
+    try {
+      const posts = await searchX(query);
+      let added = 0;
+      for (const post of posts) {
+        const key = post.url;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        // Filter: at least 3 likes for relevance
+        if ((post.likes || 0) >= 3) {
+          allPosts.push(post);
+          added++;
+        }
+      }
+      console.log(`   "${query.slice(0, 40)}..." → ${posts.length} results, ${added} above threshold`);
+    } catch (err) {
+      console.log(`   Error: ${err.message.slice(0, 100)}`);
+    }
+    // Respect rate limits
+    await new Promise((r) => setTimeout(r, 1500));
   }
 
-  // Source 2: HN RSS feeds
-  console.log("   Fetching Hacker News RSS feeds...");
-  const rssPosts = await fetchRSSFeeds();
-  console.log(`   Found ${rssPosts.length} posts from HN`);
-  for (const post of rssPosts) {
-    const key = (post.author + post.text?.slice(0, 50)).toLowerCase();
-    if (!seen.has(key)) { seen.add(key); allPosts.push(post); }
-  }
+  // Sort by likes descending
+  allPosts.sort((a, b) => (b.likes || 0) - (a.likes || 0));
 
   console.log(`   Total unique candidates: ${allPosts.length}`);
   return allPosts.slice(0, MAX_CANDIDATES);

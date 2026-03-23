@@ -21,6 +21,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           BUFFER_API_KEY_PERSONAL: ${{ secrets.BUFFER_API_KEY_PERSONAL }}
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_PERSONAL }}
+          X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
           MAX_CANDIDATES: '15'
           MAX_REPLIES: '5'
         run: node automation/discover-x-replies.js
