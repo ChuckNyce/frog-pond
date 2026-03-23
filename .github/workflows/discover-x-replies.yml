@@ -1,0 +1,26 @@
+name: X/Twitter Discovery Pipeline (Personal Brand)
+
+on:
+  schedule:
+    # Run 3x daily: 8am, 1pm, 6pm ET
+    - cron: '0 12,17,22 * * *'
+  workflow_dispatch: # Manual trigger
+
+jobs:
+  discover-x:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run X/Twitter discovery pipeline
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          BUFFER_API_KEY_PERSONAL: ${{ secrets.BUFFER_API_KEY_PERSONAL }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_PERSONAL }}
+          MAX_CANDIDATES: '15'
+          MAX_REPLIES: '5'
+        run: node automation/discover-x-replies.js
