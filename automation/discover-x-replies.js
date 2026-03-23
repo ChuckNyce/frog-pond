@@ -117,6 +117,7 @@ async function searchX(query) {
   return data.data.map((tweet) => {
     const user = users[tweet.author_id] || {};
     const metrics = tweet.public_metrics || {};
+    const followersCount = user.public_metrics?.followers_count || 0;
     return {
       author: `@${user.username || "unknown"}`,
       text: tweet.text,
@@ -125,11 +126,38 @@ async function searchX(query) {
       retweets: metrics.retweet_count || 0,
       replies: metrics.reply_count || 0,
       engagement: `${metrics.like_count || 0} likes`,
-      followers: `${user.public_metrics?.followers_count || "unknown"}`,
+      followers: followersCount,
+      followersDisplay: followersCount > 1000 ? `${(followersCount / 1000).toFixed(1)}K` : `${followersCount}`,
       createdAt: tweet.created_at,
+      ageHours: (Date.now() - new Date(tweet.created_at).getTime()) / (1000 * 60 * 60),
       source: "x",
     };
   });
+}
+
+// ── Smart filtering for small account growth ────────────────────────────────
+// Sweet spot: posts with enough audience to discover you, but not so big
+// that your reply drowns in hundreds of others.
+
+function isViableTarget(post) {
+  const likes = post.likes || 0;
+  const followers = typeof post.followers === "number" ? post.followers : 0;
+  const ageHours = post.ageHours || 999;
+
+  // Engagement sweet spot: 3-200 likes
+  // Below 3: nobody's reading. Above 200: reply gets buried.
+  if (likes < 3 || likes > 200) return false;
+
+  // Author follower range: 500-100K
+  // Below 500: tiny audience, limited discovery potential.
+  // Above 100K: your reply competes with hundreds of others.
+  if (followers > 0 && (followers < 500 || followers > 100000)) return false;
+
+  // Freshness: under 12 hours old
+  // Early replies rise to the top. Stale threads are dead.
+  if (ageHours > 12) return false;
+
+  return true;
 }
 
 async function discoverCandidates() {
@@ -147,13 +175,12 @@ async function discoverCandidates() {
         if (seen.has(key)) continue;
         seen.add(key);
 
-        // Filter: at least 3 likes for relevance
-        if ((post.likes || 0) >= 3) {
+        if (isViableTarget(post)) {
           allPosts.push(post);
           added++;
         }
       }
-      console.log(`   "${query.slice(0, 40)}..." → ${posts.length} results, ${added} above threshold`);
+      console.log(`   "${query.slice(0, 40)}..." → ${posts.length} results, ${added} viable`);
     } catch (err) {
       console.log(`   Error: ${err.message.slice(0, 100)}`);
     }
@@ -161,10 +188,15 @@ async function discoverCandidates() {
     await new Promise((r) => setTimeout(r, 1500));
   }
 
-  // Sort by likes descending
-  allPosts.sort((a, b) => (b.likes || 0) - (a.likes || 0));
+  // Sort by a composite score: likes * recency bonus
+  // Fresher posts with decent engagement rank higher
+  allPosts.sort((a, b) => {
+    const scoreA = (a.likes || 0) * (1 + Math.max(0, 6 - (a.ageHours || 6)) / 6);
+    const scoreB = (b.likes || 0) * (1 + Math.max(0, 6 - (b.ageHours || 6)) / 6);
+    return scoreB - scoreA;
+  });
 
-  console.log(`   Total unique candidates: ${allPosts.length}`);
+  console.log(`   Total viable candidates: ${allPosts.length}`);
   return allPosts.slice(0, MAX_CANDIDATES);
 }
 
