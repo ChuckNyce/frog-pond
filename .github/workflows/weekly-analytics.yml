@@ -16,12 +16,15 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Run weekly analytics
+      - name: Run unified weekly analytics
         env:
           BSKY_IDENTIFIER: ${{ secrets.BSKY_IDENTIFIER }}
           BSKY_APP_PASSWORD: ${{ secrets.BSKY_APP_PASSWORD }}
+          X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
+          X_USERNAME: ChuckNyce83
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          DISCORD_WEBHOOK_PERSONAL: ${{ secrets.DISCORD_WEBHOOK_PERSONAL }}
         run: node automation/weekly-analytics.js
 
       - name: Commit analytics data

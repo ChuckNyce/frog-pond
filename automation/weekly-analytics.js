@@ -1,19 +1,23 @@
 #!/usr/bin/env node
 
 /**
- * Algo Cracker — Weekly Analytics Report
+ * Digital Organism — Unified Weekly Analytics Report
  *
- * Pulls engagement data from Bluesky, analyzes performance via Claude,
- * saves raw data for trend tracking, and posts summary to Discord.
+ * Pulls engagement data from both accounts:
+ *   - Bash0 (@frogpond.lol) on Bluesky
+ *   - Charles (@ChuckNyce83) on X/Twitter
  *
- * Usage:
- *   node automation/weekly-analytics.js
+ * Analyzes performance via Claude, saves raw data, posts unified
+ * summary to Discord.
  *
  * Environment variables:
  *   BSKY_IDENTIFIER    - Bluesky login
  *   BSKY_APP_PASSWORD  - Bluesky app password
+ *   X_BEARER_TOKEN     - X/Twitter API Bearer Token
+ *   X_USERNAME         - X/Twitter username (without @)
  *   ANTHROPIC_API_KEY  - Claude API key
- *   DISCORD_WEBHOOK    - Discord webhook URL
+ *   DISCORD_WEBHOOK    - Discord webhook URL (Bash0 channel)
+ *   DISCORD_WEBHOOK_PERSONAL - Discord webhook URL (personal channel)
  */
 
 const fs = require("fs");
@@ -23,36 +27,33 @@ const path = require("path");
 
 const BSKY_IDENTIFIER = process.env.BSKY_IDENTIFIER;
 const BSKY_APP_PASSWORD = process.env.BSKY_APP_PASSWORD;
+const X_BEARER_TOKEN = process.env.X_BEARER_TOKEN;
+const X_USERNAME = process.env.X_USERNAME || "ChuckNyce83";
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const DISCORD_WEBHOOK = process.env.DISCORD_WEBHOOK;
+const DISCORD_WEBHOOK_PERSONAL = process.env.DISCORD_WEBHOOK_PERSONAL;
 
-if (!BSKY_IDENTIFIER || !BSKY_APP_PASSWORD || !ANTHROPIC_API_KEY) {
-  console.error("Missing required env vars: BSKY_IDENTIFIER, BSKY_APP_PASSWORD, ANTHROPIC_API_KEY");
+if (!ANTHROPIC_API_KEY) {
+  console.error("Missing required: ANTHROPIC_API_KEY");
   process.exit(1);
 }
 
 // ── Discord ─────────────────────────────────────────────────────────────────
 
-async function notifyDiscord(message) {
-  if (!DISCORD_WEBHOOK) return;
-  // Discord has a 2000 char limit per message — split if needed
+async function notifyDiscord(message, webhook) {
+  if (!webhook) return;
   const chunks = [];
   let remaining = message;
   while (remaining.length > 0) {
-    if (remaining.length <= 1950) {
-      chunks.push(remaining);
-      break;
-    }
-    // Find last newline before limit
+    if (remaining.length <= 1950) { chunks.push(remaining); break; }
     let cutoff = remaining.lastIndexOf("\n", 1950);
     if (cutoff === -1) cutoff = 1950;
     chunks.push(remaining.slice(0, cutoff));
     remaining = remaining.slice(cutoff);
   }
-
   for (const chunk of chunks) {
     try {
-      await fetch(DISCORD_WEBHOOK, {
+      await fetch(webhook, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: chunk }),
@@ -91,22 +92,21 @@ async function bskyGet(endpoint, params = {}) {
   return res.json();
 }
 
-// ── Data Collection ─────────────────────────────────────────────────────────
+async function collectBluesky() {
+  if (!BSKY_IDENTIFIER || !BSKY_APP_PASSWORD) {
+    console.log("   Bluesky credentials not configured, skipping...");
+    return null;
+  }
 
-async function getProfile() {
-  return bskyGet("app.bsky.actor.getProfile", { actor: bskySession.did });
-}
+  await bskyLogin();
+  const profile = await bskyGet("app.bsky.actor.getProfile", { actor: bskySession.did });
 
-async function getAllPosts() {
   const posts = [];
   let cursor;
-
-  // Paginate through all posts
   for (let i = 0; i < 5; i++) {
     const params = { actor: bskySession.did, limit: 50 };
     if (cursor) params.cursor = cursor;
     const data = await bskyGet("app.bsky.feed.getAuthorFeed", params);
-
     if (!data.feed || data.feed.length === 0) break;
     posts.push(...data.feed);
     cursor = data.cursor;
@@ -114,165 +114,215 @@ async function getAllPosts() {
     await new Promise((r) => setTimeout(r, 300));
   }
 
-  return posts;
+  // Normalize to common format
+  const normalized = posts.map((item) => {
+    const post = item.post;
+    return {
+      text: (post.record?.text || "").slice(0, 150),
+      likes: post.likeCount || 0,
+      reposts: post.repostCount || 0,
+      replies: post.replyCount || 0,
+      engagement: (post.likeCount || 0) + (post.repostCount || 0) + (post.replyCount || 0),
+      type: item.reply ? "reply" : "post",
+      createdAt: post.record?.createdAt || "",
+      url: `https://bsky.app/profile/${post.author?.handle}/post/${post.uri?.split("/").pop()}`,
+    };
+  });
+
+  return {
+    platform: "Bluesky",
+    handle: `@${profile.handle}`,
+    followers: profile.followersCount,
+    following: profile.followsCount,
+    totalPosts: profile.postsCount,
+    posts: normalized,
+  };
 }
 
-// ── Analysis ────────────────────────────────────────────────────────────────
+// ── X/Twitter API ───────────────────────────────────────────────────────────
 
-function analyzeEngagement(posts, daysBack = 7) {
-  const cutoff = Date.now() - daysBack * 24 * 60 * 60 * 1000;
+async function xGet(endpoint, params = {}) {
+  const url = new URL(`https://api.x.com/2/${endpoint}`);
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined) url.searchParams.set(k, v);
+  }
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${X_BEARER_TOKEN}` },
+  });
+  if (!res.ok) {
+    if (res.status === 429) {
+      console.log("   X API rate limited, waiting...");
+      await new Promise((r) => setTimeout(r, 15000));
+      return null;
+    }
+    throw new Error(`X API error: ${res.status}`);
+  }
+  return res.json();
+}
 
-  const thisWeek = [];
-  const allTime = [];
-
-  for (const item of posts) {
-    const post = item.post;
-    const createdAt = new Date(post.record?.createdAt || 0).getTime();
-    const text = post.record?.text || "";
-    const isReply = !!item.reply;
-    const likes = post.likeCount || 0;
-    const reposts = post.repostCount || 0;
-    const replies = post.replyCount || 0;
-    const engagement = likes + reposts + replies;
-
-    const entry = {
-      text: text.slice(0, 150),
-      likes,
-      reposts,
-      replies,
-      engagement,
-      isReply,
-      type: isReply ? "reply" : "post",
-      createdAt: new Date(createdAt).toISOString(),
-      uri: post.uri,
-      author: post.author?.handle,
-    };
-
-    allTime.push(entry);
-    if (createdAt > cutoff) thisWeek.push(entry);
+async function collectX() {
+  if (!X_BEARER_TOKEN) {
+    console.log("   X API credentials not configured, skipping...");
+    return null;
   }
 
-  // Sort by engagement
-  thisWeek.sort((a, b) => b.engagement - a.engagement);
-  allTime.sort((a, b) => b.engagement - a.engagement);
+  // Get user profile
+  const userRes = await xGet(`users/by/username/${X_USERNAME}`, {
+    "user.fields": "public_metrics,created_at",
+  });
+  if (!userRes?.data) throw new Error("Could not fetch X user profile");
+  const user = userRes.data;
+  const userId = user.id;
+  const metrics = user.public_metrics || {};
 
-  // Stats
-  const weekPosts = thisWeek.filter((p) => p.type === "post");
-  const weekReplies = thisWeek.filter((p) => p.type === "reply");
+  // Get recent tweets
+  const tweetsRes = await xGet(`users/${userId}/tweets`, {
+    max_results: "100",
+    "tweet.fields": "public_metrics,created_at,in_reply_to_user_id,referenced_tweets",
+    exclude: "retweets",
+  });
+
+  const tweets = tweetsRes?.data || [];
+
+  // Normalize to common format
+  const normalized = tweets.map((tweet) => {
+    const m = tweet.public_metrics || {};
+    const isReply = !!tweet.in_reply_to_user_id;
+    const isQuote = tweet.referenced_tweets?.some((r) => r.type === "quoted");
+    let type = "post";
+    if (isReply) type = "reply";
+    else if (isQuote) type = "quote";
+
+    return {
+      text: (tweet.text || "").slice(0, 150),
+      likes: m.like_count || 0,
+      reposts: m.retweet_count || 0,
+      replies: m.reply_count || 0,
+      engagement: (m.like_count || 0) + (m.retweet_count || 0) + (m.reply_count || 0),
+      type,
+      createdAt: tweet.created_at || "",
+      url: `https://x.com/${X_USERNAME}/status/${tweet.id}`,
+    };
+  });
+
+  return {
+    platform: "X/Twitter",
+    handle: `@${X_USERNAME}`,
+    followers: metrics.followers_count || 0,
+    following: metrics.following_count || 0,
+    totalPosts: metrics.tweet_count || 0,
+    posts: normalized,
+  };
+}
+
+// ── Shared Analysis ─────────────────────────────────────────────────────────
+
+function analyzeAccount(account, daysBack = 7) {
+  const cutoff = Date.now() - daysBack * 24 * 60 * 60 * 1000;
+
+  const thisWeek = account.posts.filter((p) => new Date(p.createdAt).getTime() > cutoff);
+  thisWeek.sort((a, b) => b.engagement - a.engagement);
+
+  const posts = thisWeek.filter((p) => p.type === "post");
+  const replies = thisWeek.filter((p) => p.type === "reply");
+  const quotes = thisWeek.filter((p) => p.type === "quote");
 
   const totalEngagement = thisWeek.reduce((s, p) => s + p.engagement, 0);
-  const postEngagement = weekPosts.reduce((s, p) => s + p.engagement, 0);
-  const replyEngagement = weekReplies.reduce((s, p) => s + p.engagement, 0);
+  const avgPostEng = posts.length > 0 ? (posts.reduce((s, p) => s + p.engagement, 0) / posts.length).toFixed(1) : "0";
+  const avgReplyEng = replies.length > 0 ? (replies.reduce((s, p) => s + p.engagement, 0) / replies.length).toFixed(1) : "0";
+  const avgQuoteEng = quotes.length > 0 ? (quotes.reduce((s, p) => s + p.engagement, 0) / quotes.length).toFixed(1) : "0";
 
-  const avgPostEngagement = weekPosts.length > 0 ? (postEngagement / weekPosts.length).toFixed(1) : 0;
-  const avgReplyEngagement = weekReplies.length > 0 ? (replyEngagement / weekReplies.length).toFixed(1) : 0;
-
-  // Topic detection (simple keyword matching)
-  const topics = {};
+  // Topic detection
   const topicKeywords = {
-    tech: ["ai", "tech", "software", "app", "code", "coding", "developer", "startup", "nvidia", "apple", "google", "microsoft", "amazon"],
+    tech: ["ai", "tech", "software", "app", "code", "coding", "developer", "startup", "nvidia", "apple", "google", "microsoft", "amazon", "claude", "cursor", "openai"],
     gaming: ["game", "gaming", "xbox", "playstation", "nintendo", "steam", "minecraft", "fortnite", "roblox", "console"],
-    animals: ["cat", "dog", "bird", "frog", "pet", "animal", "kitten", "puppy"],
+    "vibe coding": ["vibe cod", "vibe code", "vibecod"],
+    "build in public": ["build in public", "buildinpublic", "shipped", "launched", "side project"],
+    animals: ["cat", "dog", "bird", "frog", "pet", "animal"],
     absurd: ["cosmic", "gods", "weep", "void", "existential", "doom", "chaos"],
-    wholesome: ["love", "kind", "beautiful", "wonderful", "amazing", "grateful", "happy"],
-    news: ["breaking", "report", "study", "research", "announced", "launches", "reveals"],
   };
 
+  const topics = {};
   for (const entry of thisWeek) {
     const textLower = entry.text.toLowerCase();
     for (const [topic, keywords] of Object.entries(topicKeywords)) {
       if (keywords.some((kw) => textLower.includes(kw))) {
-        if (!topics[topic]) topics[topic] = { count: 0, totalEngagement: 0, posts: [] };
+        if (!topics[topic]) topics[topic] = { count: 0, totalEngagement: 0 };
         topics[topic].count++;
         topics[topic].totalEngagement += entry.engagement;
-        topics[topic].posts.push(entry);
       }
     }
   }
 
-  // Time analysis
-  const hourBuckets = {};
-  for (const entry of thisWeek) {
-    const hour = new Date(entry.createdAt).getUTCHours();
-    // Convert to ET (approximate — UTC-4 or UTC-5)
-    const etHour = (hour - 4 + 24) % 24;
-    const bucket = `${etHour}:00 ET`;
-    if (!hourBuckets[bucket]) hourBuckets[bucket] = { count: 0, totalEngagement: 0 };
-    hourBuckets[bucket].count++;
-    hourBuckets[bucket].totalEngagement += entry.engagement;
-  }
-
   return {
-    thisWeek,
-    allTime,
-    stats: {
-      totalPosts: thisWeek.length,
-      posts: weekPosts.length,
-      replies: weekReplies.length,
+    platform: account.platform,
+    handle: account.handle,
+    followers: account.followers,
+    following: account.following,
+    totalPostsAllTime: account.totalPosts,
+    thisWeek: {
+      total: thisWeek.length,
+      posts: posts.length,
+      replies: replies.length,
+      quotes: quotes.length,
       totalEngagement,
-      avgPostEngagement,
-      avgReplyEngagement,
+      avgPostEng,
+      avgReplyEng,
+      avgQuoteEng,
       top5: thisWeek.slice(0, 5),
     },
     topics,
-    hourBuckets,
   };
 }
 
-// ── Claude Analysis ─────────────────────────────────────────────────────────
+// ── Claude Unified Analysis ─────────────────────────────────────────────────
 
-async function getClaudeAnalysis(profile, analysis, previousReport) {
-  const topPostsText = analysis.stats.top5
-    .map((p, i) => `${i + 1}. [${p.type}] ${p.likes}❤️ ${p.reposts}🔁 ${p.replies}💬 — "${p.text.slice(0, 100)}"`)
-    .join("\n");
+async function getUnifiedAnalysis(analyses, previousReport) {
+  const accountSummaries = analyses.map((a) => {
+    const top5 = a.thisWeek.top5
+      .map((p, i) => `  ${i + 1}. [${p.type}] ${p.likes}❤️ ${p.reposts}🔁 ${p.replies}💬 — "${p.text.slice(0, 80)}"`)
+      .join("\n");
 
-  const topicSummary = Object.entries(analysis.topics)
-    .map(([topic, data]) => `${topic}: ${data.count} posts, ${data.totalEngagement} total engagement, ${(data.totalEngagement / data.count).toFixed(1)} avg`)
-    .join("\n");
+    const topicLines = Object.entries(a.topics)
+      .map(([t, d]) => `  ${t}: ${d.count} posts, ${d.totalEngagement} eng, ${(d.totalEngagement / d.count).toFixed(1)} avg`)
+      .join("\n");
 
-  const timeSummary = Object.entries(analysis.hourBuckets)
-    .sort((a, b) => b[1].totalEngagement - a[1].totalEngagement)
-    .slice(0, 5)
-    .map(([hour, data]) => `${hour}: ${data.count} posts, ${data.totalEngagement} engagement`)
-    .join("\n");
+    return `
+ACCOUNT: ${a.handle} (${a.platform})
+Followers: ${a.followers} | Following: ${a.following} | All-time posts: ${a.totalPostsAllTime}
+This week: ${a.thisWeek.posts} posts, ${a.thisWeek.replies} replies, ${a.thisWeek.quotes} quotes (${a.thisWeek.total} total)
+Total engagement: ${a.thisWeek.totalEngagement}
+Avg per post: ${a.thisWeek.avgPostEng} | Avg per reply: ${a.thisWeek.avgReplyEng} | Avg per quote: ${a.thisWeek.avgQuoteEng}
+
+Top 5:
+${top5 || "  No posts this week"}
+
+Topics:
+${topicLines || "  Not enough data"}`;
+  }).join("\n\n---\n");
 
   const previousContext = previousReport
-    ? `\nPrevious week stats: ${previousReport.stats.totalPosts} posts, ${previousReport.stats.totalEngagement} total engagement, ${previousReport.profile.followersCount} followers`
-    : "\nNo previous week data available (first report).";
+    ? `\nPrevious report: ${JSON.stringify(previousReport.accounts?.map((a) => ({ handle: a.handle, followers: a.followers })) || "none")}`
+    : "\nNo previous report available.";
 
-  const prompt = `Analyze this Bluesky account's weekly performance and provide actionable recommendations.
+  const prompt = `Analyze these two social media accounts' weekly performance. They are both run by the same person (Charles) as part of the "Digital Organism" growth experiment.
 
-ACCOUNT: @${profile.handle}
-Followers: ${profile.followersCount}
-Following: ${profile.followsCount}
-Total posts all time: ${profile.postsCount}
+${accountSummaries}
 ${previousContext}
 
-THIS WEEK:
-Posts: ${analysis.stats.posts} standalone, ${analysis.stats.replies} replies (${analysis.stats.totalPosts} total)
-Total engagement: ${analysis.stats.totalEngagement}
-Avg engagement per post: ${analysis.stats.avgPostEngagement}
-Avg engagement per reply: ${analysis.stats.avgReplyEngagement}
+CONTEXT:
+- @frogpond.lol (Bluesky): Haiku bot that creates absurd haiku responses to trending news. Early growth phase. Goal: 500 followers.
+- @ChuckNyce83 (X/Twitter): Personal brand, build-in-public, vibe coding journey. SRE by day, indie builder by night. Early growth phase.
+- Both accounts are powered by the same AI growth engine (Digital Organism / Algo Cracker).
 
-TOP 5 PERFORMERS:
-${topPostsText}
+Provide a UNIFIED analysis:
+1. Per-account: What's working, what's not (be specific, use data)
+2. Cross-platform comparison: Which platform is responding better and why
+3. Top 3 recommendations for EACH account next week
+4. Growth projections for both accounts
+5. One insight that only emerges from seeing both accounts side by side
 
-TOPIC BREAKDOWN:
-${topicSummary || "Not enough data for topic analysis"}
-
-BEST TIMES:
-${timeSummary || "Not enough data for time analysis"}
-
-CONTEXT: This is a haiku bot account (@frogpond.lol) that creates absurd haiku responses to trending tech/gaming/AI news. The account is in early growth phase (under 100 followers). The goal is to reach 500 followers. The strategy is a mix of standalone haiku posts about news and haiku replies to trending posts.
-
-Provide a concise analysis with:
-1. What's working (specific patterns, not generic praise)
-2. What's not working (be honest)
-3. Top 3 actionable recommendations for next week
-4. Projected follower milestone at current trajectory
-5. One "wild card" suggestion — something creative or unconventional to try
-
-Keep it direct, no fluff. Use data to back up every recommendation.`;
+Keep it concise and actionable. No fluff.`;
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -283,7 +333,7 @@ Keep it direct, no fluff. Use data to back up every recommendation.`;
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
+      max_tokens: 1500,
       messages: [{ role: "user", content: prompt }],
     }),
   });
@@ -299,7 +349,6 @@ const DATA_DIR = path.join(__dirname, "analytics-data");
 
 function saveReport(report) {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-
   const date = new Date().toISOString().split("T")[0];
   const filename = `report-${date}.json`;
   fs.writeFileSync(path.join(DATA_DIR, filename), JSON.stringify(report, null, 2));
@@ -309,117 +358,152 @@ function saveReport(report) {
 
 function loadPreviousReport() {
   if (!fs.existsSync(DATA_DIR)) return null;
-
   const files = fs.readdirSync(DATA_DIR)
     .filter((f) => f.startsWith("report-") && f.endsWith(".json"))
     .sort()
     .reverse();
-
-  if (files.length === 0) return null;
-
+  // Skip today's report if it exists, get the previous one
+  const today = new Date().toISOString().split("T")[0];
+  const prev = files.find((f) => !f.includes(today));
+  if (!prev) return null;
   try {
-    return JSON.parse(fs.readFileSync(path.join(DATA_DIR, files[0]), "utf8"));
+    return JSON.parse(fs.readFileSync(path.join(DATA_DIR, prev), "utf8"));
   } catch {
     return null;
   }
 }
 
-// ── Main ────────────────────────────────────────────────────────────────────
+// ── Format Discord message ──────────────────────────────────────────────────
 
-async function main() {
-  console.log("=== Algo Cracker — Weekly Analytics ===\n");
+function formatAccountSummary(analysis, previousFollowers) {
+  const a = analysis;
+  const delta = previousFollowers !== null
+    ? ` (${a.followers - previousFollowers >= 0 ? "+" : ""}${a.followers - previousFollowers})`
+    : "";
 
-  // 1. Login
-  console.log("1. Logging in to Bluesky...");
-  await bskyLogin();
-  console.log(`   Authenticated as @${bskySession.handle}\n`);
-
-  // 2. Collect data
-  console.log("2. Collecting data...");
-  const profile = await getProfile();
-  console.log(`   @${profile.handle}: ${profile.followersCount} followers, ${profile.postsCount} posts`);
-
-  const posts = await getAllPosts();
-  console.log(`   Fetched ${posts.length} posts from feed\n`);
-
-  // 3. Analyze
-  console.log("3. Analyzing engagement...");
-  const analysis = analyzeEngagement(posts, 7);
-  console.log(`   This week: ${analysis.stats.totalPosts} posts, ${analysis.stats.totalEngagement} total engagement`);
-  console.log(`   Posts avg: ${analysis.stats.avgPostEngagement} | Replies avg: ${analysis.stats.avgReplyEngagement}`);
-  console.log(`   Top performer: ${analysis.stats.top5[0]?.engagement || 0} engagement\n`);
-
-  // 4. Load previous report for comparison
-  const previousReport = loadPreviousReport();
-  if (previousReport) {
-    console.log(`   Previous report found: ${previousReport.date}`);
-    const followerDelta = profile.followersCount - (previousReport.profile?.followersCount || 0);
-    console.log(`   Follower change: ${followerDelta >= 0 ? "+" : ""}${followerDelta}\n`);
-  }
-
-  // 5. Claude analysis
-  console.log("4. Getting AI analysis...");
-  const aiAnalysis = await getClaudeAnalysis(profile, analysis, previousReport);
-  console.log("   Analysis complete\n");
-
-  // 6. Save report
-  console.log("5. Saving report...");
-  const report = {
-    date: new Date().toISOString().split("T")[0],
-    profile: {
-      handle: profile.handle,
-      followersCount: profile.followersCount,
-      followsCount: profile.followsCount,
-      postsCount: profile.postsCount,
-    },
-    stats: analysis.stats,
-    topics: analysis.topics,
-    hourBuckets: analysis.hourBuckets,
-    top5: analysis.stats.top5,
-  };
-  const filename = saveReport(report);
-
-  // 7. Discord report
-  console.log("6. Sending Discord report...\n");
-
-  const top5Text = analysis.stats.top5
-    .slice(0, 5)
+  const top3 = a.thisWeek.top5.slice(0, 3)
     .map((p, i) => {
-      const icon = p.type === "reply" ? "💬" : "📢";
-      return `${i + 1}. ${icon} ${p.likes}❤️ ${p.reposts}🔁 ${p.replies}💬 — "${p.text.slice(0, 60)}..."`;
+      const icon = p.type === "reply" ? "💬" : p.type === "quote" ? "🔄" : "📢";
+      return `${i + 1}. ${icon} ${p.likes}❤️ ${p.reposts}🔁 ${p.replies}💬 — "${p.text.slice(0, 55)}..."`;
     })
     .join("\n");
 
-  const followerDelta = previousReport
-    ? profile.followersCount - (previousReport.profile?.followersCount || 0)
-    : null;
-  const followerLine = followerDelta !== null
-    ? `Followers: **${profile.followersCount}** (${followerDelta >= 0 ? "+" : ""}${followerDelta} this week)`
-    : `Followers: **${profile.followersCount}**`;
-
-  const summaryMsg = [
-    `📊 **Algo Cracker — Weekly Report** (${report.date})`,
+  return [
+    `**${a.handle}** (${a.platform})`,
+    `Followers: **${a.followers}**${delta}`,
+    `This week: ${a.thisWeek.posts} posts, ${a.thisWeek.replies} replies, ${a.thisWeek.quotes} quotes`,
+    `Engagement: ${a.thisWeek.totalEngagement} total | Post avg: ${a.thisWeek.avgPostEng} | Reply avg: ${a.thisWeek.avgReplyEng}`,
     "",
-    `**@${profile.handle}**`,
-    followerLine,
-    `Posts this week: ${analysis.stats.posts} standalone, ${analysis.stats.replies} replies`,
-    `Total engagement: ${analysis.stats.totalEngagement}`,
-    `Avg per post: ${analysis.stats.avgPostEngagement} | Avg per reply: ${analysis.stats.avgReplyEngagement}`,
-    "",
-    `**Top 5 Performers:**`,
-    top5Text || "No posts this week",
+    `Top 3:`,
+    top3 || "No posts this week",
   ].join("\n");
+}
 
-  await notifyDiscord(summaryMsg);
+// ── Main ────────────────────────────────────────────────────────────────────
 
-  // Send AI analysis as second message
-  await notifyDiscord(`🤖 **AI Analysis:**\n\n${aiAnalysis}`);
+async function main() {
+  console.log("=== Digital Organism — Unified Weekly Analytics ===\n");
 
-  console.log("=== Done ===");
+  const accounts = [];
+  const analyses = [];
+
+  // 1. Collect Bluesky data
+  console.log("1. Collecting Bluesky data...");
+  try {
+    const bsky = await collectBluesky();
+    if (bsky) {
+      accounts.push(bsky);
+      console.log(`   @${bsky.handle}: ${bsky.followers} followers, ${bsky.posts.length} posts fetched`);
+    }
+  } catch (err) {
+    console.log(`   Bluesky error: ${err.message}`);
+  }
+
+  // 2. Collect X data
+  console.log("\n2. Collecting X/Twitter data...");
+  try {
+    const x = await collectX();
+    if (x) {
+      accounts.push(x);
+      console.log(`   ${x.handle}: ${x.followers} followers, ${x.posts.length} posts fetched`);
+    }
+  } catch (err) {
+    console.log(`   X error: ${err.message}`);
+  }
+
+  if (accounts.length === 0) {
+    console.log("\nNo accounts collected. Exiting.");
+    return;
+  }
+
+  // 3. Analyze each account
+  console.log("\n3. Analyzing engagement...");
+  for (const account of accounts) {
+    const analysis = analyzeAccount(account);
+    analyses.push(analysis);
+    console.log(`   ${analysis.handle}: ${analysis.thisWeek.total} posts this week, ${analysis.thisWeek.totalEngagement} engagement`);
+  }
+
+  // 4. Load previous report
+  const previousReport = loadPreviousReport();
+  if (previousReport) {
+    console.log(`\n   Previous report: ${previousReport.date}`);
+  }
+
+  // 5. Claude unified analysis
+  console.log("\n4. Getting AI analysis...");
+  const aiAnalysis = await getUnifiedAnalysis(analyses, previousReport);
+  console.log("   Analysis complete");
+
+  // 6. Save report
+  console.log("\n5. Saving report...");
+  const report = {
+    date: new Date().toISOString().split("T")[0],
+    accounts: analyses.map((a) => ({
+      platform: a.platform,
+      handle: a.handle,
+      followers: a.followers,
+      following: a.following,
+      thisWeek: a.thisWeek,
+      topics: a.topics,
+    })),
+  };
+  saveReport(report);
+
+  // 7. Discord reports
+  console.log("\n6. Sending Discord reports...");
+
+  const date = new Date().toISOString().split("T")[0];
+
+  // Build unified summary
+  const summaryParts = [`📊 **Digital Organism — Weekly Report** (${date})\n`];
+
+  for (const analysis of analyses) {
+    const prevFollowers = previousReport?.accounts?.find(
+      (a) => a.handle === analysis.handle
+    )?.followers ?? null;
+    summaryParts.push(formatAccountSummary(analysis, prevFollowers));
+    summaryParts.push("");
+  }
+
+  const summaryMsg = summaryParts.join("\n");
+
+  // Send to both Discord channels
+  await notifyDiscord(summaryMsg, DISCORD_WEBHOOK);
+  await notifyDiscord(summaryMsg, DISCORD_WEBHOOK_PERSONAL);
+
+  // Send AI analysis to both
+  const aiMsg = `🤖 **AI Analysis:**\n\n${aiAnalysis}`;
+  await notifyDiscord(aiMsg, DISCORD_WEBHOOK);
+  await notifyDiscord(aiMsg, DISCORD_WEBHOOK_PERSONAL);
+
+  console.log("\n=== Done ===");
 }
 
 main().catch(async (err) => {
   console.error("Fatal error:", err);
-  await notifyDiscord(`📊❌ **Weekly Analytics FAILED:** ${err.message}`);
+  const errMsg = `📊❌ **Weekly Analytics FAILED:** ${err.message}`;
+  await notifyDiscord(errMsg, DISCORD_WEBHOOK);
+  await notifyDiscord(errMsg, DISCORD_WEBHOOK_PERSONAL);
   process.exit(1);
 });
