@@ -11,8 +11,8 @@
         "posts": 15,
         "replies": 15,
         "quotes": 0,
-        "totalEngagement": 23,
-        "avgPostEng": "0.6",
+        "totalEngagement": 24,
+        "avgPostEng": "0.7",
         "avgReplyEng": "0.9",
         "avgQuoteEng": "0",
         "top5": [
@@ -37,6 +37,16 @@
             "url": "https://bsky.app/profile/frogpond.lol/post/3mhlw7ldhid2z"
           },
           {
+            "text": "// Human-driven climate change is slowing Earth's rotation at a rate not seen in 3.6 million years - Live Science\n\nearth spins like drunk bee\nhumans b",
+            "likes": 2,
+            "reposts": 0,
+            "replies": 0,
+            "engagement": 2,
+            "type": "post",
+            "createdAt": "2026-03-22T21:58:01.849Z",
+            "url": "https://bsky.app/profile/frogpond.lol/post/3mhok3ljxbu2e"
+          },
+          {
             "text": "a stranger bows back\nthe pond ripples outward now\ntwo frogs, one lily\n\n🐸",
             "likes": 1,
             "reposts": 1,
@@ -55,16 +65,6 @@
             "type": "reply",
             "createdAt": "2026-03-22T01:55:39.195Z",
             "url": "https://bsky.app/profile/frogpond.lol/post/3mhmgvknxns22"
-          },
-          {
-            "text": "// After weeks of hype, Crimson Desert debuts to high player counts but \"Mixed\" Steam reviews, citing \"disjointed graphics\", lovable cats, \"awful\" UI ",
-            "likes": 2,
-            "reposts": 0,
-            "replies": 0,
-            "engagement": 2,
-            "type": "post",
-            "createdAt": "2026-03-21T23:57:01.406Z",
-            "url": "https://bsky.app/profile/frogpond.lol/post/3mhmabgvf7x2j"
           }
         ]
       },

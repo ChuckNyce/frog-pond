@@ -6,6 +6,7 @@
   },
   "dependencies": {
     "@napi-rs/canvas": "^0.1.97",
-    "formdata-node": "^6.0.3"
+    "formdata-node": "^6.0.3",
+    "pdfkit": "^0.18.0"
   }
 }

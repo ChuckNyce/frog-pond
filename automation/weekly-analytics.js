@@ -470,32 +470,58 @@ async function main() {
   };
   saveReport(report);
 
-  // 7. Discord reports
-  console.log("\n6. Sending Discord reports...");
-
+  // 7. Generate PDF report
+  console.log("\n6. Generating PDF report...");
+  const { generateReport } = require("./report-pdf");
   const date = new Date().toISOString().split("T")[0];
 
-  // Build unified summary
-  const summaryParts = [`📊 **Digital Organism — Weekly Report** (${date})\n`];
+  const pdfData = {
+    date,
+    accounts: analyses,
+    previous: previousReport,
+  };
 
-  for (const analysis of analyses) {
-    const prevFollowers = previousReport?.accounts?.find(
-      (a) => a.handle === analysis.handle
-    )?.followers ?? null;
-    summaryParts.push(formatAccountSummary(analysis, prevFollowers));
-    summaryParts.push("");
+  const pdfPath = path.join(DATA_DIR, `report-${date}.pdf`);
+  await generateReport(pdfData, aiAnalysis, pdfPath);
+  console.log(`   PDF saved to ${pdfPath}`);
+
+  // 8. Send PDF to Discord as file attachment
+  console.log("\n7. Sending Discord notifications...");
+
+  // Quick summary for Discord text
+  const summaryLines = analyses.map((a) => {
+    const prevFollowers = previousReport?.accounts?.find((p) => p.handle === a.handle)?.followers ?? null;
+    const delta = prevFollowers !== null ? ` (${a.followers - prevFollowers >= 0 ? "+" : ""}${a.followers - prevFollowers})` : "";
+    return `**${a.handle}** (${a.platform}): ${a.followers} followers${delta}, ${a.thisWeek.totalEngagement} engagement this week`;
+  });
+
+  const summaryMsg = [
+    `📊 **Digital Organism — Weekly Report** (${date})`,
+    "",
+    ...summaryLines,
+    "",
+    "Full report attached as PDF.",
+  ].join("\n");
+
+  // Upload PDF to Discord as file attachment
+  async function sendPDFToDiscord(webhook) {
+    if (!webhook) return;
+    const { Blob } = await import("buffer");
+    const FormData = (await import("formdata-node")).FormData;
+
+    const form = new FormData();
+    form.set("content", summaryMsg);
+    form.set(
+      "files[0]",
+      new Blob([fs.readFileSync(pdfPath)], { type: "application/pdf" }),
+      `digital-organism-report-${date}.pdf`,
+    );
+
+    await fetch(webhook, { method: "POST", body: form });
   }
 
-  const summaryMsg = summaryParts.join("\n");
-
-  // Send to both Discord channels
-  await notifyDiscord(summaryMsg, DISCORD_WEBHOOK);
-  await notifyDiscord(summaryMsg, DISCORD_WEBHOOK_PERSONAL);
-
-  // Send AI analysis to both
-  const aiMsg = `🤖 **AI Analysis:**\n\n${aiAnalysis}`;
-  await notifyDiscord(aiMsg, DISCORD_WEBHOOK);
-  await notifyDiscord(aiMsg, DISCORD_WEBHOOK_PERSONAL);
+  await sendPDFToDiscord(DISCORD_WEBHOOK);
+  await sendPDFToDiscord(DISCORD_WEBHOOK_PERSONAL);
 
   console.log("\n=== Done ===");
 }
