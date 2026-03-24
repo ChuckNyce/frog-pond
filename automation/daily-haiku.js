@@ -94,8 +94,8 @@ async function fetchTrendingTopics(count) {
     if (data.articles) allArticles.push(...data.articles);
   }
 
-  // Also try "everything" for tech/gaming/AI
-  const everythingUrl = `https://newsapi.org/v2/everything?q=(AI OR gaming OR "video games" OR tech OR weird OR bizarre)&language=en&sortBy=publishedAt&pageSize=${count * 3}&apiKey=${NEWSAPI_KEY}`;
+  // Also try "everything" for tech/gaming/AI + arts/culture
+  const everythingUrl = `https://newsapi.org/v2/everything?q=(AI OR gaming OR "video games" OR tech OR weird OR bizarre OR "art exhibit" OR museum OR photography OR "book review" OR poetry OR "digital art" OR illustration OR nature)&language=en&sortBy=publishedAt&pageSize=${count * 3}&apiKey=${NEWSAPI_KEY}`;
   const evRes = await fetch(everythingUrl);
   if (evRes.ok) {
     const evData = await evRes.json();

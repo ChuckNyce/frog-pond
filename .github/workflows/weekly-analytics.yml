@@ -16,6 +16,9 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Install dependencies
+        run: npm install pdfkit formdata-node
+
       - name: Run unified weekly analytics
         env:
           BSKY_IDENTIFIER: ${{ secrets.BSKY_IDENTIFIER }}

@@ -112,8 +112,16 @@ async function discoverCandidates() {
     console.log("  Warning: Could not fetch What's Hot feed:", err.message);
   }
 
-  // Source 2: Search for trending tech/gaming/AI topics
-  const searchTerms = ["AI", "gaming", "tech", "vibe coding", "Claude", "ChatGPT", "Nintendo", "PlayStation", "startup"];
+  // Source 2: Search for trending topics (tech/gaming + arts/culture)
+  const searchTerms = [
+    // Tech & gaming (original)
+    "AI", "gaming", "tech", "vibe coding", "Claude", "ChatGPT", "Nintendo", "PlayStation", "startup",
+    // Arts & culture (new — community that's engaging with Bash0)
+    "poetry", "haiku", "creative writing", "digital art", "illustration",
+    "watercolor", "photography", "nature photography", "cat photo",
+    "sunset", "spring flowers", "bird watching", "ceramics",
+    "museum", "bookstagram", "art community",
+  ];
   for (const term of searchTerms) {
     try {
       const results = await bskyGet("app.bsky.feed.searchPosts", {
@@ -183,6 +191,11 @@ HIGH SCORES (8-10):
 - Wholesome content that could get a playful haiku
 - Product launches, announcements
 - Viral observations about daily life
+- Arts, poetry, creative writing, and cultural posts — Bash0's community is strong here
+- Nature photography, animal photos, beautiful scenery — perfect haiku material
+- Artists sharing their work (illustration, ceramics, watercolor, digital art)
+- Book/reading community posts — literary audience loves haiku
+- Museum, gallery, and art event posts
 
 LOW SCORES (1-4) - AUTO SKIP:
 - Tragedy, grief, genuine distress, death
